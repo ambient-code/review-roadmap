@@ -7,7 +7,11 @@ class Settings(BaseSettings):
     # GitHub
     GITHUB_TOKEN: str
 
-    # LLM Providers (Optional to allow fallback/selection)
+    # LLM Configuration
+    LLM_PROVIDER: str = "anthropic"  # 'anthropic', 'openai', or 'google'
+    MODEL_NAME: str  # Must be set in .env (e.g. claude-3-5-sonnet-xxxx, gpt-4o)
+
+    # API Keys
     ANTHROPIC_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None

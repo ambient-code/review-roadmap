@@ -1,7 +1,7 @@
 import httpx
 from typing import Optional
 from src.config import settings
-from src.models import PRContext, PRMetadata, FileDiff
+from src.models import PRContext, PRMetadata, FileDiff, PRComment
 
 class GitHubClient:
     def __init__(self, token: Optional[str] = None):
@@ -48,4 +48,44 @@ class GitHubClient:
                 diff_content=f.get("patch", "")  # Patch might be missing for binary/large files
             ))
 
-        return PRContext(metadata=metadata, files=files)
+        # 3. Fetch Comments (Issue comments + Review comments)
+        comments = []
+        
+        # Issue comments (general conversation)
+        issue_comments_resp = self.client.get(f"/repos/{owner}/{repo}/issues/{pr_number}/comments")
+        if issue_comments_resp.status_code == 200:
+            for c in issue_comments_resp.json():
+                comments.append(PRComment(
+                    id=c["id"],
+                    body=c["body"],
+                    user=c["user"]["login"],
+                    created_at=c["created_at"]
+                ))
+
+        # Review comments (inline code comments)
+        review_comments_resp = self.client.get(f"/repos/{owner}/{repo}/pulls/{pr_number}/comments")
+        if review_comments_resp.status_code == 200:
+            for c in review_comments_resp.json():
+                comments.append(PRComment(
+                    id=c["id"],
+                    body=c["body"],
+                    user=c["user"]["login"],
+                    path=c.get("path"),
+                    line=c.get("line"),
+                    created_at=c["created_at"]
+                ))
+        
+        return PRContext(metadata=metadata, files=files, comments=comments)
+
+    def get_file_content(self, owner: str, repo: str, path: str, ref: str) -> str:
+        """Fetches raw file content for a specific ref."""
+        resp = self.client.get(f"/repos/{owner}/{repo}/contents/{path}", params={"ref": ref})
+        resp.raise_for_status()
+        
+        # GitHub API returns base64 content, but also a 'download_url' or raw media type
+        # Simplest is to request raw media type
+        headers = self.headers.copy()
+        headers["Accept"] = "application/vnd.github.v3.raw"
+        raw_resp = self.client.get(f"/repos/{owner}/{repo}/contents/{path}", params={"ref": ref}, headers=headers)
+        raw_resp.raise_for_status()
+        return raw_resp.text
