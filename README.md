@@ -58,10 +58,10 @@ python -m src.main owner/repo/pr_number
 
 ### Example
 
-Generate a roadmap for `ambient-code/platform` PR #367 and save it to `roadmap.md`:
+Generate a roadmap for `llamastack/llama-stack` PR 3674 and save it to `roadmap.md`:
 
 ```bash
-python -m src.main ambient-code/platform/367 -o roadmap.md
+python -m src.main https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md
 ```
 
 ## Architecture
