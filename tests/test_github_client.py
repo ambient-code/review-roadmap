@@ -23,8 +23,8 @@ def test_get_pr_context_success():
         "title": "Test PR",
         "body": "Description",
         "user": {"login": "author"},
-        "base": {"ref": "main"},
-        "head": {"ref": "feature", "sha": "abc1234", "repo": {"html_url": "https://github.com/owner/repo"}},
+        "base": {"ref": "main", "repo": {"html_url": "https://github.com/base/repo"}},
+        "head": {"ref": "feature", "sha": "abc1234", "repo": {"html_url": "https://github.com/head/fork"}},
         "draft": False
     }))
     
@@ -47,6 +47,7 @@ def test_get_pr_context_success():
     # Assertions
     assert context.metadata.title == "Test PR"
     assert context.metadata.author == "author"
+    assert context.metadata.repo_url == "https://github.com/base/repo"
     assert len(context.files) == 1
     assert context.files[0].path == "file1.py"
     assert len(context.comments) == 2

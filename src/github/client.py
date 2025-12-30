@@ -29,7 +29,7 @@ class GitHubClient:
             base_branch=pr_data["base"]["ref"],
             head_branch=pr_data["head"]["ref"],
             head_commit_sha=pr_data["head"]["sha"],
-            repo_url=pr_data["head"]["repo"]["html_url"],
+            repo_url=pr_data["base"]["repo"]["html_url"],
             is_draft=pr_data["draft"]
         )
 
