@@ -1,3 +1,4 @@
+import os
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,6 +16,22 @@ def get_llm():
         return ChatAnthropic(
             model_name=settings.REVIEW_ROADMAP_MODEL_NAME,
             api_key=settings.ANTHROPIC_API_KEY
+        )
+    elif provider == "anthropic-vertex":
+        from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+        
+        # Set up Google credentials if specified
+        credentials_path = settings.get_google_credentials_path()
+        if credentials_path:
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path
+        
+        if not settings.ANTHROPIC_VERTEX_PROJECT_ID:
+            raise ValueError("ANTHROPIC_VERTEX_PROJECT_ID must be set when using anthropic-vertex provider")
+        
+        return ChatAnthropicVertex(
+            model_name=settings.REVIEW_ROADMAP_MODEL_NAME,
+            project=settings.ANTHROPIC_VERTEX_PROJECT_ID,
+            location=settings.ANTHROPIC_VERTEX_REGION,
         )
     elif provider == "openai":
         return ChatOpenAI(
