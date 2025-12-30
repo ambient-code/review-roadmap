@@ -51,8 +51,8 @@ cp env.example .env
 
 Run the tool using the CLI:
 
-```bash
-python -m src.main {PR link in the form owner/repo/pr_number or just a URL to the PR}
+```
+python -m review_roadmap {PR link in the form owner/repo/pr_number or just a URL to the PR}
 ```
 
 **options:**
@@ -64,7 +64,7 @@ python -m src.main {PR link in the form owner/repo/pr_number or just a URL to th
 Generate a roadmap for `llamastack/llama-stack` PR 3674 and save it to `roadmap.md`:
 
 ```bash
-python -m src.main https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md
+python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md
 ```
 
 ## Architecture

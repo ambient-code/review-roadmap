@@ -1,8 +1,8 @@
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from src.github.client import GitHubClient
-from src.agent.graph import build_graph
+from review_roadmap.github.client import GitHubClient
+from review_roadmap.agent.graph import build_graph
 
 app = typer.Typer()
 console = Console()

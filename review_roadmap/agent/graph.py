@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
-from src.agent.state import ReviewState
-from src.agent.nodes import analyze_structure, context_expansion, draft_roadmap
+from review_roadmap.agent.state import ReviewState
+from review_roadmap.agent.nodes import analyze_structure, context_expansion, draft_roadmap
 
 def build_graph():
     workflow = StateGraph(ReviewState)

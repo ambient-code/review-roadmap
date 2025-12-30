@@ -1,9 +1,9 @@
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
-from src.agent.state import ReviewState
-from src.config import settings
-from src.github.client import GitHubClient
+from review_roadmap.agent.state import ReviewState
+from review_roadmap.config import settings
+from review_roadmap.github.client import GitHubClient
 
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -31,8 +31,8 @@ def get_llm():
 
 llm = get_llm()
 
-from src.agent.prompts import ANALYZE_STRUCTURE_SYSTEM_PROMPT, DRAFT_ROADMAP_SYSTEM_PROMPT, CONTEXT_EXPANSION_SYSTEM_PROMPT
-from src.agent.tools import read_file
+from review_roadmap.agent.prompts import ANALYZE_STRUCTURE_SYSTEM_PROMPT, DRAFT_ROADMAP_SYSTEM_PROMPT, CONTEXT_EXPANSION_SYSTEM_PROMPT
+from review_roadmap.agent.tools import read_file
 
 def analyze_structure(state: ReviewState) -> dict:
     """Groups files into logical components."""

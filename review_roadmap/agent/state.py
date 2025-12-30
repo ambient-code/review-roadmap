@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from src.models import PRContext
+from review_roadmap.models import PRContext
 
 class ReviewState(BaseModel):
     """The state of the review agent."""

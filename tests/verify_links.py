@@ -4,7 +4,7 @@ import os
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.github.client import GitHubClient
+from review_roadmap.github.client import GitHubClient
 
 def verify_pr_links(owner: str, repo: str, pr_number: int):
     client = GitHubClient()

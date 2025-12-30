@@ -1,8 +1,8 @@
 import pytest
 import respx
 from httpx import Response
-from src.github.client import GitHubClient
-from src.config import settings
+from review_roadmap.github.client import GitHubClient
+from review_roadmap.config import settings
 
 @respx.mock
 def test_get_pr_context_success():

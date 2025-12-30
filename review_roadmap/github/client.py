@@ -1,7 +1,7 @@
 import httpx
 from typing import Optional
-from src.config import settings
-from src.models import PRContext, PRMetadata, FileDiff, PRComment
+from review_roadmap.config import settings
+from review_roadmap.models import PRContext, PRMetadata, FileDiff, PRComment
 
 class GitHubClient:
     def __init__(self, token: Optional[str] = None):

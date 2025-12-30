@@ -1,5 +1,5 @@
 import hashlib
-from src.models import FileDiff
+from review_roadmap.models import FileDiff
 
 def test_get_pr_diff_link():
     """Verifies that the PR diff link uses the correct SHA256 hash formatting."""
