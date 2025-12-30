@@ -38,12 +38,15 @@ cp env.example .env
 | Variable | Description |
 |----------|-------------|
 | `GITHUB_TOKEN` | GitHub personal access token for API access |
-| `ANTHROPIC_API_KEY` | Anthropic API key (required if using Claude) |
-| `OPENAI_API_KEY` | OpenAI API key (required if using GPT models) |
-| `GOOGLE_API_KEY` | Google API key (required if using Gemini) |
-| `REVIEW_ROADMAP_LLM_PROVIDER` | LLM provider: `anthropic`, `openai`, or `google` |
+| `ANTHROPIC_API_KEY` | Anthropic API key (required if provider is `anthropic`) |
+| `OPENAI_API_KEY` | OpenAI API key (required if provider is `openai`) |
+| `GOOGLE_API_KEY` | Google API key (required if provider is `google`) |
+| `REVIEW_ROADMAP_LLM_PROVIDER` | LLM provider: `anthropic`, `anthropic-vertex`, `openai`, or `google` |
 | `REVIEW_ROADMAP_MODEL_NAME` | Model name (e.g., `claude-opus-4-5`, `gpt-4o`) |
 | `REVIEW_ROADMAP_LOG_LEVEL` | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `ANTHROPIC_VERTEX_PROJECT_ID` | GCP project ID (required if provider is `anthropic-vertex`) |
+| `ANTHROPIC_VERTEX_REGION` | GCP region (optional, defaults to `us-east5`) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP credentials JSON (optional, defaults to `~/.config/gcloud/application_default_credentials.json`) |
 
 > **Note**: The `.env` file values are overridden by any matching environment variables in your shell.  If you do not want to have a .env file, you can just skip these steps and set these variables in your environment instead.
 
