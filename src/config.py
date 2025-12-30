@@ -7,16 +7,16 @@ class Settings(BaseSettings):
     # GitHub
     GITHUB_TOKEN: str
 
-    # LLM Configuration
-    LLM_PROVIDER: str = "anthropic"  # 'anthropic', 'openai', or 'google'
-    MODEL_NAME: str  # Must be set in .env (e.g. claude-3-5-sonnet-xxxx, gpt-4o)
+    # LLM Configuration (prefixed to avoid conflicts with shell environment)
+    REVIEW_ROADMAP_LLM_PROVIDER: str = "anthropic"  # 'anthropic', 'openai', or 'google'
+    REVIEW_ROADMAP_MODEL_NAME: str  # Must be set in .env (e.g. claude-3-5-sonnet-xxxx, gpt-4o)
 
     # API Keys
     ANTHROPIC_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
 
-    # App Config
-    LOG_LEVEL: str = "INFO"
+    # App Config (prefixed to avoid conflicts with shell environment)
+    REVIEW_ROADMAP_LOG_LEVEL: str = "INFO"
 
 settings = Settings()

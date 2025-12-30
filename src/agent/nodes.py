@@ -9,21 +9,21 @@ from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 def get_llm():
-    provider = settings.LLM_PROVIDER.lower()
+    provider = settings.REVIEW_ROADMAP_LLM_PROVIDER.lower()
     
     if provider == "anthropic":
         return ChatAnthropic(
-            model_name=settings.MODEL_NAME,
+            model_name=settings.REVIEW_ROADMAP_MODEL_NAME,
             api_key=settings.ANTHROPIC_API_KEY
         )
     elif provider == "openai":
         return ChatOpenAI(
-            model_name=settings.MODEL_NAME,
+            model_name=settings.REVIEW_ROADMAP_MODEL_NAME,
             api_key=settings.OPENAI_API_KEY
         )
     elif provider == "google":
         return ChatGoogleGenerativeAI(
-            model=settings.MODEL_NAME,
+            model=settings.REVIEW_ROADMAP_MODEL_NAME,
             google_api_key=settings.GOOGLE_API_KEY
         )
     else:
