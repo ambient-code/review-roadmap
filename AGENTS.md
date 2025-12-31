@@ -18,7 +18,21 @@ A CLI tool that uses LLMs (Claude, GPT, Gemini) to generate structured, human-fr
 
 - **Install:** `pip install .` (uses `pyproject.toml`, no requirements.txt)
 - **Test:** `pytest`
-- **Run:** `python -m review_roadmap <owner/repo/pr_number>`
+- **Run:** `review_roadmap <owner/repo/pr_number>` (or `python -m review_roadmap`)
+
+### Sandbox Restrictions
+
+The following commands require `required_permissions: ['all']` to run outside the sandbox:
+
+| Command | Reason |
+|---------|--------|
+| `pip install .` | Needs network access and system SSL certificates |
+| `pytest` | Reads `.env` file which is in `.gitignore` (sandboxed commands cannot access gitignored files) |
+| `review_roadmap` | Reads `.env` file at startup |
+| `git push` | Needs network access and system SSL certificates |
+| `gh pr create` | Needs network access and system SSL certificates |
+
+> **Note:** The sandbox blocks access to files in `.gitignore` (like `.env`). Any command that loads configuration from `.env` will fail in the sandbox.
 
 ## Coding Preferences
 
