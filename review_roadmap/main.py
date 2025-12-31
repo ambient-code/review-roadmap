@@ -4,9 +4,16 @@ from rich.markdown import Markdown
 from review_roadmap.github.client import GitHubClient
 from review_roadmap.agent.graph import build_graph
 from review_roadmap.config import settings
+from review_roadmap.logging import configure_logging
 
 app = typer.Typer(add_completion=False)
 console = Console()
+
+# Initialize structured logging
+configure_logging(
+    log_level=settings.REVIEW_ROADMAP_LOG_LEVEL,
+    log_format=settings.REVIEW_ROADMAP_LOG_FORMAT,
+)
 
 
 def format_pr_comment(roadmap_content: str) -> str:

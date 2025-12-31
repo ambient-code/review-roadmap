@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # App Config (prefixed to avoid conflicts with shell environment)
     REVIEW_ROADMAP_LOG_LEVEL: str = "INFO"
+    REVIEW_ROADMAP_LOG_FORMAT: str = "console"  # 'console' for pretty output, 'json' for structured
 
     def get_google_credentials_path(self) -> Optional[str]:
         """Get the Google Application Credentials path, checking env var and default locations."""

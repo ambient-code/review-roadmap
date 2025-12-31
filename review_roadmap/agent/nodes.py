@@ -10,6 +10,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from review_roadmap.agent.state import ReviewState
 from review_roadmap.config import settings
 from review_roadmap.github.client import GitHubClient
+from review_roadmap.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # Default max tokens for LLM responses (roadmaps can be lengthy)
@@ -75,7 +78,7 @@ from review_roadmap.agent.tools import read_file
 
 def analyze_structure(state: ReviewState) -> Dict[str, Any]:
     """Groups files into logical components."""
-    print("--- Node: Analyze Structure ---")
+    logger.info("node_started", node="analyze_structure")
     
     files_list = "\n".join([
         f"- {f.path} ({f.status}, +{f.additions}/-{f.deletions})"
@@ -119,12 +122,12 @@ def _fetch_tool_call_content(
         if not path:
             continue
             
-        print(f"Fetching: {path}")
+        logger.debug("fetching_file", path=path)
         try:
             content = client.get_file_content(owner, repo, path, sha)
             fetched_content[path] = content
         except Exception as e:
-            print(f"Error fetching {path}: {e}")
+            logger.warning("fetch_file_error", path=path, error=str(e))
             fetched_content[path] = f"Error fetching content: {str(e)}"
     
     return fetched_content
@@ -132,7 +135,7 @@ def _fetch_tool_call_content(
 
 def context_expansion(state: ReviewState) -> Dict[str, Any]:
     """Decides if we need to fetch more content."""
-    print("--- Node: Context Expansion ---")
+    logger.info("node_started", node="context_expansion")
     
     model_with_tools = llm.bind_tools([read_file])
     
@@ -162,7 +165,7 @@ def context_expansion(state: ReviewState) -> Dict[str, Any]:
     
     fetched_content: Dict[str, str] = {}
     if hasattr(response, "tool_calls") and response.tool_calls:
-        print(f"--- Fetching {len(response.tool_calls)} files ---")
+        logger.info("fetching_files", count=len(response.tool_calls))
         owner, repo = _parse_repo_info(state.pr_context.metadata.repo_url)
         sha = state.pr_context.metadata.head_commit_sha
         fetched_content = _fetch_tool_call_content(
@@ -205,7 +208,7 @@ def _build_fetched_content_str(fetched_content: Dict[str, str]) -> str:
 
 def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
     """Generates the final Markdown roadmap."""
-    print("--- Node: Draft Roadmap ---")
+    logger.info("node_started", node="draft_roadmap")
     
     files_context = _build_files_context(state)
     comments_context = _build_comments_context(state)
