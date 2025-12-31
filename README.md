@@ -54,9 +54,11 @@ cp env.example .env
 
 Run the tool using the CLI:
 
+```bash
+review_roadmap {PR link in the form owner/repo/pr_number or just a URL to the PR}
 ```
-python -m review_roadmap {PR link in the form owner/repo/pr_number or just a URL to the PR}
-```
+
+> **Note:** After installation with `pip install .`, the `review_roadmap` command is available in your PATH. You can also run it as `python -m review_roadmap` if preferred.
 
 **Options:**
 
@@ -74,19 +76,19 @@ You can use both `-o` and `-p` together—the roadmap will be generated once and
 Generate a roadmap for `llamastack/llama-stack` PR 3674 and save it to `roadmap.md`:
 
 ```bash
-python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md
+review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md
 ```
 
 Post the roadmap directly as a comment on the PR:
 
 ```bash
-python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 --post
+review_roadmap https://github.com/llamastack/llama-stack/pull/3674 --post
 ```
 
 Generate and both save to file and post to PR:
 
 ```bash
-python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md -p
+review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md -p
 ```
 
 ## Development
