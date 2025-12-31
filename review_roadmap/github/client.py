@@ -89,3 +89,29 @@ class GitHubClient:
         raw_resp = self.client.get(f"/repos/{owner}/{repo}/contents/{path}", params={"ref": ref}, headers=headers)
         raw_resp.raise_for_status()
         return raw_resp.text
+
+    def check_write_access(self, owner: str, repo: str) -> bool:
+        """
+        Check if the authenticated user has write access to the repository.
+        Returns True if the user can push/write, False otherwise.
+        """
+        resp = self.client.get(f"/repos/{owner}/{repo}")
+        resp.raise_for_status()
+        repo_data = resp.json()
+        
+        # The 'permissions' field is only present when authenticated
+        permissions = repo_data.get("permissions", {})
+        return permissions.get("push", False) or permissions.get("admin", False)
+
+    def post_pr_comment(self, owner: str, repo: str, pr_number: int, body: str) -> dict:
+        """
+        Post a comment on a pull request.
+        Uses the issues API since PR comments are issue comments.
+        Returns the created comment data.
+        """
+        resp = self.client.post(
+            f"/repos/{owner}/{repo}/issues/{pr_number}/comments",
+            json={"body": body}
+        )
+        resp.raise_for_status()
+        return resp.json()

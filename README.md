@@ -58,16 +58,35 @@ Run the tool using the CLI:
 python -m review_roadmap {PR link in the form owner/repo/pr_number or just a URL to the PR}
 ```
 
-**options:**
+**Options:**
 
-- `--output`, `-o`: Save the roadmap to a file instead of printing to stdout.
+| Option | Description |
+|--------|-------------|
+| `--output`, `-o` | Save the roadmap to a file instead of printing to stdout |
+| `--post`, `-p` | Post the roadmap as a comment directly on the PR |
 
-### Example
+You can use both `-o` and `-p` together—the roadmap will be generated once and saved to both the file and the PR comment.
+
+> **Note:** To use `--post`, your `GITHUB_TOKEN` must have write access to the repository. For fine-grained personal access tokens, ensure the **"Pull requests"** permission is set to **"Read and write"**. For classic tokens, the `repo` scope is required.
+
+### Examples
 
 Generate a roadmap for `llamastack/llama-stack` PR 3674 and save it to `roadmap.md`:
 
 ```bash
 python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md
+```
+
+Post the roadmap directly as a comment on the PR:
+
+```bash
+python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 --post
+```
+
+Generate and both save to file and post to PR:
+
+```bash
+python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md -p
 ```
 
 ## Architecture
