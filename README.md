@@ -89,6 +89,19 @@ Generate and both save to file and post to PR:
 python -m review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md -p
 ```
 
+## Development
+
+```bash
+# Install in development mode
+pip install -e .
+
+# Run tests
+pytest
+
+# Run tests with verbose output
+pytest -v
+```
+
 ## Architecture
 
 The tool uses **LangGraph** to orchestrate the workflow:
