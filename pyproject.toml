@@ -37,10 +37,12 @@ addopts = "--cov=review_roadmap --cov-report=term-missing --cov-report=html"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["review_roadmap"]
+# Use source_pkgs to track the installed package, not just the source directory
+# This works whether installed normally or in editable mode
+source_pkgs = ["review_roadmap"]
 branch = true
 omit = [
-    "review_roadmap/__pycache__/*",
+    "*/__pycache__/*",
 ]
 
 [tool.coverage.report]
