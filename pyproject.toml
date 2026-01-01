@@ -33,14 +33,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-addopts = "--cov=review_roadmap --cov-report=term-missing --cov-report=html"
+addopts = "--cov --cov-report=term-missing --cov-report=html"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["review_roadmap"]
+# Use source_pkgs to track the installed package, not just the source directory
+# This works whether installed normally or in editable mode
+source_pkgs = ["review_roadmap"]
 branch = true
 omit = [
-    "review_roadmap/__pycache__/*",
+    "*/__pycache__/*",
 ]
 
 [tool.coverage.report]
@@ -49,5 +51,5 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]
-fail_under = 25
+fail_under = 60
 show_missing = true
