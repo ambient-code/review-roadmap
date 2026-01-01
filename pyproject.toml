@@ -51,5 +51,5 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]
-fail_under = 60
+fail_under = 80
 show_missing = true
