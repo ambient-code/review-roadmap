@@ -92,7 +92,21 @@ def get_llm() -> BaseChatModel:
         raise ValueError(f"Unsupported LLM provider: {provider}")
 
 
-llm = get_llm()
+# Lazy LLM initialization - only created when first accessed
+_llm_instance: BaseChatModel | None = None
+
+
+def _get_llm_instance() -> BaseChatModel:
+    """Get or create the LLM instance (lazy initialization).
+
+    This avoids creating the LLM at module import time, which allows
+    tests to mock the LLM before it's instantiated.
+    """
+    global _llm_instance
+    if _llm_instance is None:
+        _llm_instance = get_llm()
+    return _llm_instance
+
 
 from review_roadmap.agent.prompts import (
     ANALYZE_STRUCTURE_SYSTEM_PROMPT,
@@ -126,7 +140,7 @@ def analyze_structure(state: ReviewState) -> Dict[str, Any]:
         ("human", "PR Title: {title}\n\nFiles:\n{files}")
     ])
     
-    chain = prompt | llm
+    chain = prompt | _get_llm_instance()
     response = chain.invoke({
         "title": state.pr_context.metadata.title,
         "files": files_list
@@ -205,7 +219,7 @@ def context_expansion(state: ReviewState) -> Dict[str, Any]:
     """
     logger.info("node_started", node="context_expansion")
     
-    model_with_tools = llm.bind_tools([read_file])
+    model_with_tools = _get_llm_instance().bind_tools([read_file])
     
     files_list = "\n".join([f"- {f.path} ({f.status})" for f in state.pr_context.files])
     topology = state.topology.get('analysis', 'No analysis')
@@ -342,7 +356,7 @@ def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
         ("human", "{context}")
     ])
     
-    chain = prompt | llm
+    chain = prompt | _get_llm_instance()
     response = chain.invoke({"context": context_str})
     
     return {"roadmap": response.content}

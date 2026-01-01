@@ -190,11 +190,10 @@ class TestAnalyzeStructureNode:
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
 
-        with patch("review_roadmap.agent.nodes.llm") as mock_llm:
-            # Make the pipe operator return our mock chain
-            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
 
-            # We need to patch at the point of use
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
             with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
                 mock_prompt = MagicMock()
                 mock_prompt.__or__ = MagicMock(return_value=mock_chain)
@@ -220,10 +219,11 @@ class TestContextExpansionNode:
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
 
-        with patch("review_roadmap.agent.nodes.llm") as mock_llm:
-            mock_llm.bind_tools.return_value = mock_llm
-            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        mock_llm = MagicMock()
+        mock_llm.bind_tools.return_value = mock_llm
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
 
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
             with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
                 mock_prompt = MagicMock()
                 mock_prompt.__or__ = MagicMock(return_value=mock_chain)
@@ -246,10 +246,11 @@ class TestContextExpansionNode:
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
 
-        with patch("review_roadmap.agent.nodes.llm") as mock_llm:
-            mock_llm.bind_tools.return_value = mock_llm
-            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        mock_llm = MagicMock()
+        mock_llm.bind_tools.return_value = mock_llm
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
 
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
             with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
                 mock_prompt = MagicMock()
                 mock_prompt.__or__ = MagicMock(return_value=mock_chain)
@@ -282,9 +283,10 @@ class TestDraftRoadmapNode:
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
 
-        with patch("review_roadmap.agent.nodes.llm") as mock_llm:
-            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
 
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
             with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
                 mock_prompt = MagicMock()
                 mock_prompt.__or__ = MagicMock(return_value=mock_chain)
@@ -311,9 +313,10 @@ class TestDraftRoadmapNode:
         mock_chain = MagicMock()
         mock_chain.invoke.side_effect = capture_invoke
 
-        with patch("review_roadmap.agent.nodes.llm") as mock_llm:
-            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
 
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
             with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
                 mock_prompt = MagicMock()
                 mock_prompt.__or__ = MagicMock(return_value=mock_chain)
