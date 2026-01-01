@@ -1,3 +1,9 @@
+"""LangGraph node functions for the review roadmap agent.
+
+This module contains the node functions that make up the LangGraph workflow,
+along with helper functions for LLM initialization and context building.
+"""
+
 import os
 from typing import Any, Dict, List, Tuple, Union
 
@@ -20,7 +26,17 @@ MAX_TOKENS = 4096
 
 
 def _get_anthropic_vertex_llm() -> BaseChatModel:
-    """Create Anthropic model via Google Vertex AI."""
+    """Create an Anthropic model via Google Vertex AI.
+
+    Configures authentication using either explicit credentials path or
+    default gcloud application credentials.
+
+    Returns:
+        A ChatAnthropicVertex instance configured for the project.
+
+    Raises:
+        ValueError: If ANTHROPIC_VERTEX_PROJECT_ID is not set.
+    """
     from langchain_google_vertexai.model_garden import ChatAnthropicVertex
     
     credentials_path = settings.get_google_credentials_path()
@@ -39,7 +55,17 @@ def _get_anthropic_vertex_llm() -> BaseChatModel:
 
 
 def get_llm() -> BaseChatModel:
-    """Create and return the configured LLM instance."""
+    """Create and return the configured LLM instance.
+
+    Reads the provider from REVIEW_ROADMAP_LLM_PROVIDER setting and
+    initializes the appropriate LangChain chat model.
+
+    Returns:
+        A LangChain chat model instance for the configured provider.
+
+    Raises:
+        ValueError: If the provider is not supported.
+    """
     provider = settings.REVIEW_ROADMAP_LLM_PROVIDER.lower()
     
     if provider == "anthropic":
@@ -77,7 +103,17 @@ from review_roadmap.agent.tools import read_file
 
 
 def analyze_structure(state: ReviewState) -> Dict[str, Any]:
-    """Groups files into logical components."""
+    """Analyze PR file structure and group into logical components.
+
+    First node in the workflow. Uses an LLM to analyze the changed files
+    and identify logical groupings (e.g., 'Backend API', 'Frontend', 'Config').
+
+    Args:
+        state: Current workflow state containing PR context.
+
+    Returns:
+        Dict with 'topology' key containing the structural analysis.
+    """
     logger.info("node_started", node="analyze_structure")
     
     files_list = "\n".join([
@@ -100,7 +136,14 @@ def analyze_structure(state: ReviewState) -> Dict[str, Any]:
 
 
 def _parse_repo_info(repo_url: str) -> Tuple[str, str]:
-    """Extract owner and repo name from a GitHub repo URL."""
+    """Extract owner and repo name from a GitHub repository URL.
+
+    Args:
+        repo_url: Full GitHub URL (e.g., 'https://github.com/owner/repo').
+
+    Returns:
+        Tuple of (owner, repo_name).
+    """
     parts = repo_url.rstrip("/").split("/")
     return parts[-2], parts[-1]  # owner, repo
 
@@ -110,9 +153,23 @@ def _fetch_tool_call_content(
     client: GitHubClient,
     owner: str,
     repo: str,
-    sha: str
+    sha: str,
 ) -> Dict[str, str]:
-    """Fetch file content for each read_file tool call."""
+    """Fetch file content from GitHub for each read_file tool call.
+
+    Processes tool calls from the LLM and fetches the requested file
+    contents from GitHub. Errors are captured in the result rather than raised.
+
+    Args:
+        tool_calls: List of tool call dicts from LLM response.
+        client: GitHub API client instance.
+        owner: Repository owner.
+        repo: Repository name.
+        sha: Commit SHA to fetch files from.
+
+    Returns:
+        Dict mapping file paths to their content (or error messages).
+    """
     fetched_content: Dict[str, str] = {}
     
     for tool_call in tool_calls:
@@ -134,7 +191,18 @@ def _fetch_tool_call_content(
 
 
 def context_expansion(state: ReviewState) -> Dict[str, Any]:
-    """Decides if we need to fetch more content."""
+    """Optionally fetch additional file content for better context.
+
+    Second node in the workflow. Uses an LLM with tool-calling to decide
+    if any additional files should be fetched to understand the PR better.
+    For example, fetching a parent class when reviewing inheritance changes.
+
+    Args:
+        state: Current workflow state with PR context and topology analysis.
+
+    Returns:
+        Dict with 'fetched_content' key mapping paths to file contents.
+    """
     logger.info("node_started", node="context_expansion")
     
     model_with_tools = llm.bind_tools([read_file])
@@ -176,7 +244,14 @@ def context_expansion(state: ReviewState) -> Dict[str, Any]:
 
 
 def _build_files_context(state: ReviewState) -> List[str]:
-    """Build file context strings with PR diff links."""
+    """Build formatted file list with PR diff deep links.
+
+    Args:
+        state: Current workflow state containing PR context.
+
+    Returns:
+        List of formatted strings like '- path/file.py (modified): <url>'.
+    """
     repo_url = state.pr_context.metadata.repo_url
     pr_number = state.pr_context.metadata.number
     return [
@@ -186,7 +261,14 @@ def _build_files_context(state: ReviewState) -> List[str]:
 
 
 def _build_comments_context(state: ReviewState) -> List[str]:
-    """Build comment context strings."""
+    """Build formatted list of existing PR comments.
+
+    Args:
+        state: Current workflow state containing PR context.
+
+    Returns:
+        List of formatted strings like '- username (file:line): comment body'.
+    """
     comments_context = []
     for c in state.pr_context.comments:
         location = f"({c.path}:{c.line})" if c.path else "(General)"
@@ -195,7 +277,16 @@ def _build_comments_context(state: ReviewState) -> List[str]:
 
 
 def _build_fetched_content_str(fetched_content: Dict[str, str]) -> str:
-    """Build fetched content string with truncation."""
+    """Format fetched file contents for inclusion in the LLM prompt.
+
+    Truncates large files to 2000 characters to avoid token limits.
+
+    Args:
+        fetched_content: Dict mapping file paths to their content.
+
+    Returns:
+        Formatted string with file contents, or empty string if none.
+    """
     if not fetched_content:
         return ""
     
@@ -207,7 +298,18 @@ def _build_fetched_content_str(fetched_content: Dict[str, str]) -> str:
 
 
 def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
-    """Generates the final Markdown roadmap."""
+    """Generate the final Markdown review roadmap.
+
+    Final node in the workflow. Synthesizes all gathered context (PR metadata,
+    file analysis, topology, comments, fetched content) into a structured
+    roadmap with deep links to guide the reviewer.
+
+    Args:
+        state: Current workflow state with all accumulated context.
+
+    Returns:
+        Dict with 'roadmap' key containing the Markdown roadmap string.
+    """
     logger.info("node_started", node="draft_roadmap")
     
     files_context = _build_files_context(state)
