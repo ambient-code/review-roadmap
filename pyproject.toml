@@ -33,7 +33,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-addopts = "--cov=review_roadmap --cov-report=term-missing --cov-report=html"
+addopts = "--cov --cov-report=term-missing --cov-report=html"
 testpaths = ["tests"]
 
 [tool.coverage.run]
