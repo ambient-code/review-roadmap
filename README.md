@@ -14,7 +14,7 @@ A CLI tool that uses LLMs (Claude) to generate a structured, human-friendly road
 1. **Clone the repository**:
 
 ```bash
-git clone https://github.com/jwm4/review-roadmap.git
+git clone https://github.com/ambient-code/review-roadmap.git
 cd review-roadmap
 ```
 
