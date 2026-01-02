@@ -5,6 +5,7 @@ from review_roadmap.github.client import GitHubClient
 from review_roadmap.agent.graph import build_graph
 from review_roadmap.config import settings
 from review_roadmap.logging import configure_logging
+from review_roadmap.models import WriteAccessStatus
 
 app = typer.Typer(add_completion=False)
 console = Console()
@@ -61,14 +62,20 @@ def generate(
     if post:
         console.print(f"[bold blue]Checking write access for {owner}/{repo}...[/bold blue]")
         try:
-            has_access = gh_client.check_write_access(owner, repo)
-            if not has_access:
+            # Pass pr_number to enable live write test for fine-grained PATs
+            access_result = gh_client.check_write_access(owner, repo, pr_number)
+            
+            if access_result.status == WriteAccessStatus.DENIED:
                 console.print(
-                    "[red]Error: Your GitHub token does not have write access to this repository.[/red]\n"
+                    f"[red]Error: {access_result.message}[/red]\n"
                     "[yellow]To use --post, your token needs 'Pull requests: Read and write' permission.[/yellow]"
                 )
                 raise typer.Exit(code=1)
-            console.print("[green]Write access confirmed.[/green]")
+            elif access_result.status == WriteAccessStatus.UNCERTAIN:
+                console.print(f"[yellow]Warning: {access_result.message}[/yellow]")
+                console.print("[yellow]Proceeding, but posting may fail...[/yellow]")
+            else:
+                console.print("[green]Write access confirmed.[/green]")
         except typer.Exit:
             raise
         except Exception as e:
@@ -108,6 +115,12 @@ def generate(
             console.print(f"[bold green]Roadmap posted to PR #{pr_number}[/bold green]")
         except Exception as e:
             console.print(f"[red]Error posting comment to PR: {e}[/red]")
+            if "403" in str(e):
+                console.print(
+                    "\n[yellow]This usually means your token lacks write access to this repository.[/yellow]\n"
+                    "[yellow]If using a fine-grained PAT, ensure it is configured for this specific repository[/yellow]\n"
+                    f"[yellow]with 'Pull requests: Read and write' permission for {owner}/{repo}.[/yellow]"
+                )
             raise typer.Exit(code=1)
 
     # If neither output nor post, print to console

@@ -10,7 +10,10 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from review_roadmap.config import settings
-from review_roadmap.models import PRContext, PRMetadata, FileDiff, PRComment
+from review_roadmap.models import (
+    PRContext, PRMetadata, FileDiff, PRComment,
+    WriteAccessResult, WriteAccessStatus,
+)
 
 
 class GitHubClient:
@@ -220,17 +223,60 @@ class GitHubClient:
         raw_resp.raise_for_status()
         return raw_resp.text
 
-    def check_write_access(self, owner: str, repo: str) -> bool:
-        """Check if the authenticated user has write access to the repository.
+    def _test_write_with_reaction(self, owner: str, repo: str, pr_number: int) -> bool:
+        """Test write access by creating and immediately deleting a reaction.
 
-        Used to validate permissions before attempting to post a PR comment.
+        This is a non-destructive way to verify the token can write to the PR.
+        Uses the 'eyes' emoji (👀) as it's unobtrusive if cleanup fails.
 
         Args:
             owner: Repository owner.
             repo: Repository name.
+            pr_number: PR number to test against.
 
         Returns:
-            True if the user has push or admin access, False otherwise.
+            True if write access is confirmed, False otherwise.
+        """
+        try:
+            # Create a reaction on the PR (PRs are issues in GitHub's API)
+            create_resp = self.client.post(
+                f"/repos/{owner}/{repo}/issues/{pr_number}/reactions",
+                json={"content": "eyes"}
+            )
+            
+            if create_resp.status_code in (200, 201):
+                # Successfully created - now clean it up
+                reaction_id = create_resp.json().get("id")
+                if reaction_id:
+                    self.client.delete(
+                        f"/repos/{owner}/{repo}/issues/{pr_number}/reactions/{reaction_id}"
+                    )
+                return True
+            elif create_resp.status_code == 403:
+                return False
+            else:
+                # Unexpected status - treat as uncertain
+                return False
+        except Exception:
+            return False
+
+    def check_write_access(
+        self, owner: str, repo: str, pr_number: Optional[int] = None
+    ) -> WriteAccessResult:
+        """Check if the authenticated token can write to the repository.
+
+        Validates:
+        1. The user has push/admin permissions on the repository
+        2. The token has the required OAuth scopes (for classic PATs/OAuth tokens)
+        3. For fine-grained PATs: performs a live test using reactions if pr_number provided
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Optional PR number for live write test (used for fine-grained PATs).
+
+        Returns:
+            WriteAccessResult with status, confidence level, and explanation.
 
         Raises:
             httpx.HTTPStatusError: If the repository request fails.
@@ -239,8 +285,75 @@ class GitHubClient:
         resp.raise_for_status()
         repo_data = resp.json()
         
+        # Check user's role-based permissions
         permissions = repo_data.get("permissions", {})
-        return permissions.get("push", False) or permissions.get("admin", False)
+        has_role_access = permissions.get("push", False) or permissions.get("admin", False)
+        
+        if not has_role_access:
+            return WriteAccessResult(
+                status=WriteAccessStatus.DENIED,
+                is_fine_grained_pat=False,
+                message="Your user account does not have write access to this repository."
+            )
+        
+        # Check token's OAuth scopes (only present for classic PATs and OAuth tokens)
+        oauth_scopes_header = resp.headers.get("X-OAuth-Scopes")
+        
+        if oauth_scopes_header is not None:
+            # Classic PAT or OAuth token - can verify scopes definitively
+            scopes = [s.strip() for s in oauth_scopes_header.split(",") if s.strip()]
+            is_private = repo_data.get("private", False)
+            
+            if is_private:
+                has_token_scope = "repo" in scopes
+                required_scope = "repo"
+            else:
+                has_token_scope = "repo" in scopes or "public_repo" in scopes
+                required_scope = "repo or public_repo"
+            
+            if has_token_scope:
+                return WriteAccessResult(
+                    status=WriteAccessStatus.GRANTED,
+                    is_fine_grained_pat=False,
+                    message="Classic token with correct scopes verified."
+                )
+            else:
+                return WriteAccessResult(
+                    status=WriteAccessStatus.DENIED,
+                    is_fine_grained_pat=False,
+                    message=f"Token lacks required scope ({required_scope}). Current scopes: {', '.join(scopes) or 'none'}"
+                )
+        
+        # No X-OAuth-Scopes header = fine-grained PAT
+        # Try a live write test if we have a PR number
+        if pr_number is not None:
+            if self._test_write_with_reaction(owner, repo, pr_number):
+                return WriteAccessResult(
+                    status=WriteAccessStatus.GRANTED,
+                    is_fine_grained_pat=True,
+                    message="Fine-grained PAT write access verified via live test."
+                )
+            else:
+                return WriteAccessResult(
+                    status=WriteAccessStatus.DENIED,
+                    is_fine_grained_pat=True,
+                    message=(
+                        "Fine-grained PAT detected but write test failed. "
+                        f"Ensure your token has 'Pull requests: Read and write' permission "
+                        f"for {owner}/{repo}."
+                    )
+                )
+        
+        # No PR number provided - can't do live test
+        return WriteAccessResult(
+            status=WriteAccessStatus.UNCERTAIN,
+            is_fine_grained_pat=True,
+            message=(
+                "Fine-grained PAT detected. Cannot verify if this token is configured "
+                f"for {owner}/{repo}. If posting fails, ensure your token has "
+                "'Pull requests: Read and write' permission for this specific repository."
+            )
+        )
 
     def post_pr_comment(self, owner: str, repo: str, pr_number: int, body: str) -> Dict[str, Any]:
         """Post a comment on a pull request.
