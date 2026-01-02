@@ -1,6 +1,6 @@
 # Code Review Roadmap
 
-A CLI tool that uses LLMs (Claude) to generate a structured, human-friendly roadmap for reviewing GitHub Pull Requests. It acts as a "Guide", helping you understand the architecture and review order of a complex PR before you dive into the diffs.
+A CLI tool that uses LLMs (Claude) to generate a structured, human-friendly roadmap for reviewing GitHub Pull Requests. It acts as a guide, helping you understand the architecture and review order of a complex PR before you dive into the diffs.
 
 ## Features
 
