@@ -3,6 +3,7 @@ import respx
 from httpx import Response
 from review_roadmap.github.client import GitHubClient
 from review_roadmap.config import settings
+from review_roadmap.models import WriteAccessStatus
 
 @respx.mock
 def test_get_pr_context_success():
@@ -73,15 +74,21 @@ def test_get_file_content_success():
 
 
 @respx.mock
-def test_check_write_access_with_push_permission():
-    """Verifies that check_write_access returns True when user has push permission."""
+def test_check_write_access_fine_grained_pat_with_push():
+    """Fine-grained PAT with push permission returns UNCERTAIN status.
+    
+    We can't verify fine-grained PAT access because GitHub returns user permissions,
+    not token-specific permissions for each repository.
+    """
     owner = "owner"
     repo = "repo"
     url = f"https://api.github.com/repos/{owner}/{repo}"
     
+    # Fine-grained PATs don't return X-OAuth-Scopes header
     respx.get(url).mock(return_value=Response(200, json={
         "id": 12345,
         "name": repo,
+        "private": False,
         "permissions": {
             "admin": False,
             "push": True,
@@ -90,14 +97,16 @@ def test_check_write_access_with_push_permission():
     }))
     
     client = GitHubClient(token="fake-token")
-    has_access = client.check_write_access(owner, repo)
+    result = client.check_write_access(owner, repo)
     
-    assert has_access is True
+    assert result.status == WriteAccessStatus.UNCERTAIN
+    assert result.is_fine_grained_pat is True
+    assert "Fine-grained PAT" in result.message
 
 
 @respx.mock
-def test_check_write_access_with_admin_permission():
-    """Verifies that check_write_access returns True when user has admin permission."""
+def test_check_write_access_fine_grained_pat_with_admin():
+    """Fine-grained PAT with admin permission returns UNCERTAIN status."""
     owner = "owner"
     repo = "repo"
     url = f"https://api.github.com/repos/{owner}/{repo}"
@@ -105,6 +114,7 @@ def test_check_write_access_with_admin_permission():
     respx.get(url).mock(return_value=Response(200, json={
         "id": 12345,
         "name": repo,
+        "private": False,
         "permissions": {
             "admin": True,
             "push": False,
@@ -113,14 +123,15 @@ def test_check_write_access_with_admin_permission():
     }))
     
     client = GitHubClient(token="fake-token")
-    has_access = client.check_write_access(owner, repo)
+    result = client.check_write_access(owner, repo)
     
-    assert has_access is True
+    assert result.status == WriteAccessStatus.UNCERTAIN
+    assert result.is_fine_grained_pat is True
 
 
 @respx.mock
-def test_check_write_access_no_permission():
-    """Verifies that check_write_access returns False when user lacks write access."""
+def test_check_write_access_fine_grained_pat_no_permission():
+    """Fine-grained PAT without push/admin returns DENIED status."""
     owner = "owner"
     repo = "repo"
     url = f"https://api.github.com/repos/{owner}/{repo}"
@@ -128,6 +139,7 @@ def test_check_write_access_no_permission():
     respx.get(url).mock(return_value=Response(200, json={
         "id": 12345,
         "name": repo,
+        "private": False,
         "permissions": {
             "admin": False,
             "push": False,
@@ -136,14 +148,15 @@ def test_check_write_access_no_permission():
     }))
     
     client = GitHubClient(token="fake-token")
-    has_access = client.check_write_access(owner, repo)
+    result = client.check_write_access(owner, repo)
     
-    assert has_access is False
+    assert result.status == WriteAccessStatus.DENIED
+    assert "does not have write access" in result.message
 
 
 @respx.mock
 def test_check_write_access_no_permissions_field():
-    """Verifies that check_write_access returns False when permissions field is missing."""
+    """Missing permissions field returns DENIED status."""
     owner = "owner"
     repo = "repo"
     url = f"https://api.github.com/repos/{owner}/{repo}"
@@ -155,9 +168,249 @@ def test_check_write_access_no_permissions_field():
     }))
     
     client = GitHubClient(token="fake-token")
-    has_access = client.check_write_access(owner, repo)
+    result = client.check_write_access(owner, repo)
     
-    assert has_access is False
+    assert result.status == WriteAccessStatus.DENIED
+
+
+@respx.mock
+def test_check_write_access_classic_pat_with_repo_scope():
+    """Classic PAT with 'repo' scope returns GRANTED status."""
+    owner = "owner"
+    repo = "repo"
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    
+    # Classic PATs include X-OAuth-Scopes header
+    respx.get(url).mock(return_value=Response(
+        200,
+        json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": True, "pull": True}
+        },
+        headers={"X-OAuth-Scopes": "repo, read:user"}
+    ))
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo)
+    
+    assert result.status == WriteAccessStatus.GRANTED
+    assert result.is_fine_grained_pat is False
+
+
+@respx.mock
+def test_check_write_access_classic_pat_with_public_repo_scope():
+    """Classic PAT with 'public_repo' scope on public repo returns GRANTED."""
+    owner = "owner"
+    repo = "repo"
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    
+    respx.get(url).mock(return_value=Response(
+        200,
+        json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": True, "pull": True}
+        },
+        headers={"X-OAuth-Scopes": "public_repo, read:user"}
+    ))
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo)
+    
+    assert result.status == WriteAccessStatus.GRANTED
+
+
+@respx.mock
+def test_check_write_access_classic_pat_without_write_scope():
+    """Classic PAT without write scope returns DENIED, even with push permission.
+    
+    This is the key bug fix: the user may have push permission on the repo,
+    but the token lacks the OAuth scope to actually write.
+    """
+    owner = "owner"
+    repo = "repo"
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    
+    respx.get(url).mock(return_value=Response(
+        200,
+        json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": True, "pull": True}  # User has push access
+        },
+        headers={"X-OAuth-Scopes": "read:user, read:org"}  # But token lacks write scope
+    ))
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo)
+    
+    assert result.status == WriteAccessStatus.DENIED
+    assert "lacks required scope" in result.message
+
+
+@respx.mock
+def test_check_write_access_classic_pat_private_repo_needs_repo_scope():
+    """Private repo with only 'public_repo' scope returns DENIED."""
+    owner = "owner"
+    repo = "repo"
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    
+    respx.get(url).mock(return_value=Response(
+        200,
+        json={
+            "id": 12345,
+            "name": repo,
+            "private": True,  # Private repo
+            "permissions": {"admin": False, "push": True, "pull": True}
+        },
+        headers={"X-OAuth-Scopes": "public_repo, read:user"}  # Only has public_repo scope
+    ))
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo)
+    
+    assert result.status == WriteAccessStatus.DENIED
+
+
+@respx.mock
+def test_check_write_access_classic_pat_private_repo_with_repo_scope():
+    """Private repo with 'repo' scope returns GRANTED."""
+    owner = "owner"
+    repo = "repo"
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    
+    respx.get(url).mock(return_value=Response(
+        200,
+        json={
+            "id": 12345,
+            "name": repo,
+            "private": True,
+            "permissions": {"admin": False, "push": True, "pull": True}
+        },
+        headers={"X-OAuth-Scopes": "repo, read:user"}
+    ))
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo)
+    
+    assert result.status == WriteAccessStatus.GRANTED
+
+
+@respx.mock
+def test_check_write_access_classic_pat_empty_scopes():
+    """Classic PAT with empty scopes returns DENIED."""
+    owner = "owner"
+    repo = "repo"
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    
+    respx.get(url).mock(return_value=Response(
+        200,
+        json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": True, "push": True, "pull": True}
+        },
+        headers={"X-OAuth-Scopes": ""}  # Empty scopes
+    ))
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo)
+    
+    assert result.status == WriteAccessStatus.DENIED
+
+
+@respx.mock
+def test_check_write_access_fine_grained_pat_live_test_success():
+    """Fine-grained PAT with successful live write test returns GRANTED."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    # Mock repo endpoint (no X-OAuth-Scopes = fine-grained PAT)
+    respx.get(f"https://api.github.com/repos/{owner}/{repo}").mock(
+        return_value=Response(200, json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": True, "pull": True}
+        })
+    )
+    
+    # Mock successful reaction creation
+    respx.post(f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/reactions").mock(
+        return_value=Response(201, json={"id": 99999, "content": "eyes"})
+    )
+    
+    # Mock reaction deletion
+    respx.delete(f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/reactions/99999").mock(
+        return_value=Response(204)
+    )
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo, pr_number)
+    
+    assert result.status == WriteAccessStatus.GRANTED
+    assert result.is_fine_grained_pat is True
+    assert "verified via live test" in result.message
+
+
+@respx.mock
+def test_check_write_access_fine_grained_pat_live_test_denied():
+    """Fine-grained PAT with failed live write test returns DENIED."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    # Mock repo endpoint (no X-OAuth-Scopes = fine-grained PAT)
+    respx.get(f"https://api.github.com/repos/{owner}/{repo}").mock(
+        return_value=Response(200, json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": True, "pull": True}
+        })
+    )
+    
+    # Mock 403 on reaction creation (token not configured for this repo)
+    respx.post(f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/reactions").mock(
+        return_value=Response(403, json={"message": "Resource not accessible by integration"})
+    )
+    
+    client = GitHubClient(token="fake-token")
+    result = client.check_write_access(owner, repo, pr_number)
+    
+    assert result.status == WriteAccessStatus.DENIED
+    assert result.is_fine_grained_pat is True
+    assert "write test failed" in result.message
+
+
+@respx.mock
+def test_check_write_access_fine_grained_pat_no_pr_number():
+    """Fine-grained PAT without pr_number returns UNCERTAIN (can't do live test)."""
+    owner = "owner"
+    repo = "repo"
+    
+    # Mock repo endpoint (no X-OAuth-Scopes = fine-grained PAT)
+    respx.get(f"https://api.github.com/repos/{owner}/{repo}").mock(
+        return_value=Response(200, json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": True, "pull": True}
+        })
+    )
+    
+    client = GitHubClient(token="fake-token")
+    # Don't pass pr_number - should return UNCERTAIN
+    result = client.check_write_access(owner, repo)
+    
+    assert result.status == WriteAccessStatus.UNCERTAIN
+    assert result.is_fine_grained_pat is True
 
 
 @respx.mock

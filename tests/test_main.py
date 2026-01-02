@@ -198,7 +198,12 @@ class TestGenerateCommand:
             with patch("review_roadmap.main.GitHubClient") as mock_gh:
                 mock_client = MagicMock()
                 mock_client.get_pr_context.return_value = mock_context
-                mock_client.check_write_access.return_value = True
+                from review_roadmap.models import WriteAccessResult, WriteAccessStatus
+                mock_client.check_write_access.return_value = WriteAccessResult(
+                    status=WriteAccessStatus.GRANTED,
+                    is_fine_grained_pat=False,
+                    message="Classic token with correct scopes verified."
+                )
                 mock_gh.return_value = mock_client
 
                 with patch("review_roadmap.main.build_graph") as mock_build:
@@ -223,7 +228,12 @@ class TestGenerateCommand:
         with patch("review_roadmap.main.configure_logging"):
             with patch("review_roadmap.main.GitHubClient") as mock_gh:
                 mock_client = MagicMock()
-                mock_client.check_write_access.return_value = False
+                from review_roadmap.models import WriteAccessResult, WriteAccessStatus
+                mock_client.check_write_access.return_value = WriteAccessResult(
+                    status=WriteAccessStatus.DENIED,
+                    is_fine_grained_pat=False,
+                    message="Token lacks required scope."
+                )
                 mock_gh.return_value = mock_client
 
                 from review_roadmap.main import app
@@ -262,7 +272,12 @@ class TestGenerateCommand:
             with patch("review_roadmap.main.GitHubClient") as mock_gh:
                 mock_client = MagicMock()
                 mock_client.get_pr_context.return_value = mock_context
-                mock_client.check_write_access.return_value = True
+                from review_roadmap.models import WriteAccessResult, WriteAccessStatus
+                mock_client.check_write_access.return_value = WriteAccessResult(
+                    status=WriteAccessStatus.GRANTED,
+                    is_fine_grained_pat=False,
+                    message="Classic token with correct scopes verified."
+                )
                 mock_client.post_pr_comment.side_effect = Exception("Post failed")
                 mock_gh.return_value = mock_client
 

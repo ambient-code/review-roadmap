@@ -4,8 +4,36 @@ This module defines Pydantic models that represent the structured data
 fetched from GitHub's API, including PR metadata, file diffs, and comments.
 """
 
+from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
+
+
+class WriteAccessStatus(str, Enum):
+    """Result of checking write access to a repository."""
+    
+    GRANTED = "granted"
+    """Write access confirmed with high confidence (classic PAT with correct scopes)."""
+    
+    DENIED = "denied"
+    """Write access definitely not available (missing permissions or scopes)."""
+    
+    UNCERTAIN = "uncertain"
+    """Cannot reliably determine access (fine-grained PAT - may or may not work)."""
+
+
+class WriteAccessResult(BaseModel):
+    """Result of a write access check.
+    
+    Attributes:
+        status: The access status (granted, denied, or uncertain).
+        is_fine_grained_pat: True if the token appears to be a fine-grained PAT.
+        message: Human-readable explanation of the result.
+    """
+    
+    status: WriteAccessStatus
+    is_fine_grained_pat: bool = False
+    message: str = ""
 
 
 class FileDiff(BaseModel):

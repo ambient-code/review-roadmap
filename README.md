@@ -37,7 +37,7 @@ cp env.example .env
 
 | Variable | Description |
 |----------|-------------|
-| `GITHUB_TOKEN` | GitHub personal access token for API access |
+| `GITHUB_TOKEN` | GitHub personal access token for API access ([see below](#github-token-setup)) |
 | `ANTHROPIC_API_KEY` | Anthropic API key (required if provider is `anthropic`) |
 | `OPENAI_API_KEY` | OpenAI API key (required if provider is `openai`) |
 | `GOOGLE_API_KEY` | Google API key (required if provider is `google`) |
@@ -49,6 +49,56 @@ cp env.example .env
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP credentials JSON (optional, defaults to `~/.config/gcloud/application_default_credentials.json`) |
 
 > **Note**: The `.env` file values are overridden by any matching environment variables in your shell.  If you do not want to have a .env file, you can just skip these steps and set these variables in your environment instead.
+
+### GitHub Token Setup
+
+A GitHub personal access token (PAT) is required to fetch PR data. The type of token and permissions needed depend on your use case:
+
+#### Read-Only Access (default)
+
+For generating roadmaps without posting comments, a token with **read access to repositories** is sufficient.
+
+#### Write Access (for `--post` flag)
+
+To post roadmaps as PR comments using the `--post` flag, your token needs **write access**. The specific requirements differ by token type:
+
+| Token Type | Required Permissions |
+|------------|---------------------|
+| **Fine-grained PAT** | Repository access → Pull requests: **Read and write** |
+| **Classic PAT** | `repo` scope (full repo access) or `public_repo` (public repos only) |
+
+#### Creating a Fine-Grained Personal Access Token (Recommended)
+
+Fine-grained tokens are more secure because they limit access to specific repositories.
+
+1. Go to [GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens](https://github.com/settings/tokens?type=beta)
+2. Click **"Generate new token"**
+3. Configure the token:
+   - **Token name**: e.g., `review-roadmap`
+   - **Expiration**: Choose an appropriate duration
+   - **Repository access**: Select "Only select repositories" and choose the repos you want to analyze
+   - **Permissions**:
+     - **Pull requests**: Read-only (for basic usage) or Read and write (for `--post`)
+     - **Contents**: Read-only (required to fetch file contents for context expansion)
+4. Click **"Generate token"** and copy the token value
+
+#### Creating a Classic Personal Access Token
+
+Classic tokens are simpler but grant broader access.
+
+1. Go to [GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens)
+2. Click **"Generate new token"** → **"Generate new token (classic)"**
+3. Configure the token:
+   - **Note**: e.g., `review-roadmap`
+   - **Expiration**: Choose an appropriate duration
+   - **Scopes**:
+     - `repo` — Full access (works for both public and private repos)
+     - Or `public_repo` — Only for public repositories
+4. Click **"Generate token"** and copy the token value
+
+#### Important: Token Scopes vs. User Permissions
+
+Even if you have collaborator access to a repository, your token must also have the correct **OAuth scopes** to perform write operations. A common mistake is using a token with read-only scopes while expecting write access to work based on your user permissions. The tool checks both your repository permissions and your token's scopes before attempting to post comments.
 
 ## Usage
 
@@ -69,7 +119,7 @@ review_roadmap {PR link in the form owner/repo/pr_number or just a URL to the PR
 
 You can use both `-o` and `-p` together—the roadmap will be generated once and saved to both the file and the PR comment.
 
-> **Note:** To use `--post`, your `GITHUB_TOKEN` must have write access to the repository. For fine-grained personal access tokens, ensure the **"Pull requests"** permission is set to **"Read and write"**. For classic tokens, the `repo` scope is required.
+> **Note:** The `--post` flag requires a token with write access. See [GitHub Token Setup](#github-token-setup) for details.
 
 ### Examples
 
