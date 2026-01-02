@@ -167,7 +167,7 @@ This document outlines potential future improvements for review-roadmap and disc
 2. **Development velocity concern is manageable:**
    - Use `pip install -e .` locally for development
    - Only publish releases for stable milestones
-   - Users can still install from git for bleeding-edge: `pip install git+https://github.com/jwm4/review-roadmap.git`
+   - Users can still install from git for bleeding-edge: `pip install git+https://github.com/ambient-code/review-roadmap.git`
 3. **GitHub Actions will be much cleaner** with PyPI (one-liner install vs. checkout + setup)
 4. **Migration pitch is stronger** with: "Here's a working PyPI package with GitHub Actions integration that's already helping developers"
 

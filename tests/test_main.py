@@ -27,7 +27,7 @@ class TestFormatPrComment:
             assert "🗺️ **Auto-Generated Review Roadmap**" in result
 
             # Check attribution link
-            assert "https://github.com/jwm4/review-roadmap" in result
+            assert "https://github.com/ambient-code/review-roadmap" in result
 
             # Check model info format (provider/model)
             assert "anthropic/claude-sonnet-4-20250514" in result
