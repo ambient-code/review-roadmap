@@ -53,12 +53,31 @@ The following commands require `required_permissions: ['all']` to run outside th
 - **State Management:** See `review_roadmap/agent/state.py` for the `ReviewState` model that flows through the graph.
 - **Prompts:** LLM prompts are centralized in `review_roadmap/agent/prompts.py`.
 
+## Git Workflow
+
+Before starting any new feature or fix:
+
+1. **Sync with remote:** `git fetch origin`
+2. **Check out main:** `git checkout main`
+3. **Pull latest:** `git pull origin main`
+4. **Create feature branch:** `git checkout -b feat/your-feature-name`
+
+Before creating a PR, rebase onto the latest main to avoid conflicts:
+
+```bash
+git fetch origin
+git rebase origin/main
+pytest  # Verify tests still pass after rebase
+git push --force-with-lease  # If branch was already pushed
+```
+
 ## Guidelines & Rules
 
 - **Never** delete `.env` files or `env.example`.
 - **Never** hardcode API keys — all secrets go through environment variables.
 - **Always** run `pytest` after modifying logic in `review_roadmap/`.
 - **Always** update `env.example` when adding new environment variables.
+- **Always** sync with `origin/main` before starting new work (see Git Workflow above).
 - **Ask** before adding new heavy dependencies (especially LLM providers or frameworks).
 - **Commits:** Use [Conventional Commits](https://www.conventionalcommits.org/) (e.g., `feat:`, `fix:`, `docs:`).
 
