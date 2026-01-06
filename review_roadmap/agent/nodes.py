@@ -112,6 +112,7 @@ from review_roadmap.agent.prompts import (
     ANALYZE_STRUCTURE_SYSTEM_PROMPT,
     CONTEXT_EXPANSION_SYSTEM_PROMPT,
     DRAFT_ROADMAP_SYSTEM_PROMPT,
+    REFLECT_ON_ROADMAP_SYSTEM_PROMPT,
 )
 from review_roadmap.agent.tools import read_file
 
@@ -318,13 +319,17 @@ def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
     file analysis, topology, comments, fetched content) into a structured
     roadmap with deep links to guide the reviewer.
 
+    If reflection feedback is present (from a previous iteration), it is
+    included in the prompt to guide improvements.
+
     Args:
         state: Current workflow state with all accumulated context.
 
     Returns:
         Dict with 'roadmap' key containing the Markdown roadmap string.
     """
-    logger.info("node_started", node="draft_roadmap")
+    logger.info("node_started", node="draft_roadmap", 
+                iteration=state.reflection_iterations)
     
     files_context = _build_files_context(state)
     comments_context = _build_comments_context(state)
@@ -332,6 +337,15 @@ def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
     
     repo_url = state.pr_context.metadata.repo_url
     pr_number = state.pr_context.metadata.number
+    
+    # Include reflection feedback if this is a retry
+    feedback_section = ""
+    if state.reflection_feedback:
+        feedback_section = f"""
+    
+    ## Self-Review Feedback (address these issues in your revision)
+    {state.reflection_feedback}
+    """
     
     context_str = f"""
     Title: {state.pr_context.metadata.title}
@@ -349,6 +363,7 @@ def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
     Existing Comments:
     {chr(10).join(comments_context) if comments_context else "No comments found."}
     {fetched_context_str}
+    {feedback_section}
     """
     
     prompt = ChatPromptTemplate.from_messages([
@@ -360,3 +375,71 @@ def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
     response = chain.invoke({"context": context_str})
     
     return {"roadmap": response.content}
+
+
+def reflect_on_roadmap(state: ReviewState) -> Dict[str, Any]:
+    """Self-review the generated roadmap before presenting to user.
+
+    Evaluates the roadmap against quality criteria and either approves it
+    or provides specific feedback for improvement. This implements the
+    self-reflection pattern to catch issues before humans see them.
+
+    Args:
+        state: Current workflow state with the generated roadmap.
+
+    Returns:
+        Dict with reflection results:
+        - reflection_passed: Whether the roadmap passed review
+        - reflection_feedback: Specific feedback if failed
+        - reflection_iterations: Incremented iteration count
+    """
+    logger.info("node_started", node="reflect_on_roadmap",
+                iteration=state.reflection_iterations)
+    
+    # Build context for reflection
+    files_list = "\n".join([f"- {f.path}" for f in state.pr_context.files])
+    
+    context_str = f"""## PR Context
+Title: {state.pr_context.metadata.title}
+Changed Files:
+{files_list}
+
+## Generated Roadmap
+{state.roadmap}
+
+## Previous Feedback (if any)
+{state.reflection_feedback or "None - first review"}
+"""
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", REFLECT_ON_ROADMAP_SYSTEM_PROMPT),
+        ("human", "{context}")
+    ])
+    
+    chain = prompt | _get_llm_instance()
+    response = chain.invoke({"context": context_str})
+    
+    # Parse response (with fallback for non-JSON responses)
+    import json
+    try:
+        result = json.loads(response.content)
+        passed = result.get("passed", False)
+        feedback = result.get("feedback", "")
+        notes = result.get("notes", "")
+    except json.JSONDecodeError:
+        # If LLM didn't return valid JSON, assume it passed
+        logger.warning("reflection_response_not_json", content=response.content[:200])
+        passed = True
+        feedback = ""
+        notes = "Self-review: completed (non-JSON response)"
+    
+    if passed:
+        logger.info("reflection_passed", notes=notes)
+    else:
+        logger.info("reflection_failed", feedback=feedback)
+    
+    return {
+        "reflection_passed": passed,
+        "reflection_feedback": feedback,
+        "reflection_iterations": state.reflection_iterations + 1,
+    }

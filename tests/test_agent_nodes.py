@@ -333,3 +333,151 @@ class TestDraftRoadmapNode:
         assert "src/main.py" in ctx  # Files
         assert "reviewer1" in ctx  # Comments
 
+    def test_draft_roadmap_includes_reflection_feedback(
+        self, sample_review_state: ReviewState
+    ):
+        """Test that draft_roadmap includes reflection feedback when present."""
+        # Add reflection feedback to state
+        sample_review_state.reflection_feedback = "Missing file: src/utils.py not mentioned"
+        sample_review_state.reflection_iterations = 1
+
+        captured_context = {}
+
+        def capture_invoke(args):
+            captured_context["context"] = args["context"]
+            mock_response = MagicMock()
+            mock_response.content = "# Improved Roadmap"
+            return mock_response
+
+        mock_chain = MagicMock()
+        mock_chain.invoke.side_effect = capture_invoke
+
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
+            with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
+                mock_prompt = MagicMock()
+                mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+                mock_template.from_messages.return_value = mock_prompt
+
+                from review_roadmap.agent.nodes import draft_roadmap
+
+                draft_roadmap(sample_review_state)
+
+        # Verify the reflection feedback is included
+        ctx = captured_context["context"]
+        assert "Self-Review Feedback" in ctx
+        assert "Missing file: src/utils.py not mentioned" in ctx
+
+
+class TestReflectOnRoadmapNode:
+    """Tests for the reflect_on_roadmap node function."""
+
+    def test_reflection_passes(self, sample_review_state_with_roadmap: ReviewState):
+        """Test reflection node when roadmap passes review."""
+        mock_response = MagicMock()
+        mock_response.content = '{"passed": true, "notes": "Self-review: Good coverage"}'
+
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
+            with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
+                mock_prompt = MagicMock()
+                mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+                mock_template.from_messages.return_value = mock_prompt
+
+                from review_roadmap.agent.nodes import reflect_on_roadmap
+
+                result = reflect_on_roadmap(sample_review_state_with_roadmap)
+
+        assert result["reflection_passed"] is True
+        assert result["reflection_feedback"] == ""
+        assert result["reflection_iterations"] == 1
+
+    def test_reflection_fails_with_feedback(
+        self, sample_review_state_with_roadmap: ReviewState
+    ):
+        """Test reflection node when issues are found."""
+        mock_response = MagicMock()
+        mock_response.content = '{"passed": false, "feedback": "Missing deep links to specific lines"}'
+
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
+            with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
+                mock_prompt = MagicMock()
+                mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+                mock_template.from_messages.return_value = mock_prompt
+
+                from review_roadmap.agent.nodes import reflect_on_roadmap
+
+                result = reflect_on_roadmap(sample_review_state_with_roadmap)
+
+        assert result["reflection_passed"] is False
+        assert "Missing deep links" in result["reflection_feedback"]
+        assert result["reflection_iterations"] == 1
+
+    def test_reflection_handles_non_json_response(
+        self, sample_review_state_with_roadmap: ReviewState
+    ):
+        """Test graceful handling of non-JSON LLM response."""
+        mock_response = MagicMock()
+        mock_response.content = "The roadmap looks good overall, no major issues found."
+
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
+            with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
+                mock_prompt = MagicMock()
+                mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+                mock_template.from_messages.return_value = mock_prompt
+
+                from review_roadmap.agent.nodes import reflect_on_roadmap
+
+                result = reflect_on_roadmap(sample_review_state_with_roadmap)
+
+        # Should default to passed when JSON parsing fails
+        assert result["reflection_passed"] is True
+        assert result["reflection_iterations"] == 1
+
+    def test_reflection_increments_iteration_count(
+        self, sample_review_state_with_roadmap: ReviewState
+    ):
+        """Test that reflection increments the iteration counter."""
+        # Set initial iteration count
+        sample_review_state_with_roadmap.reflection_iterations = 1
+
+        mock_response = MagicMock()
+        mock_response.content = '{"passed": true, "notes": "OK"}'
+
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
+            with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
+                mock_prompt = MagicMock()
+                mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+                mock_template.from_messages.return_value = mock_prompt
+
+                from review_roadmap.agent.nodes import reflect_on_roadmap
+
+                result = reflect_on_roadmap(sample_review_state_with_roadmap)
+
+        assert result["reflection_iterations"] == 2
+

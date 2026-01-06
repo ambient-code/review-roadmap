@@ -7,6 +7,7 @@ A CLI tool that uses LLMs (Claude) to generate a structured, human-friendly road
 - **Topology Analysis**: Groups changed files into logical components (e.g., API, DB, Frontend).
 - **Deep Linking**: Generates links to specific lines of code in the PR.
 - **Review Guidance**: Suggests a logical order for reviewing files.
+- **Self-Reflection**: Reviews its own output before presenting, catching issues and improving quality.
 - **Integration**: Fetches PR metadata, diffs, and existing comments from GitHub.
 
 ## Installation
@@ -116,6 +117,7 @@ review_roadmap {PR link in the form owner/repo/pr_number or just a URL to the PR
 |--------|-------------|
 | `--output`, `-o` | Save the roadmap to a file instead of printing to stdout |
 | `--post`, `-p` | Post the roadmap as a comment directly on the PR |
+| `--no-reflection` | Skip the self-reflection step for faster results |
 
 You can use both `-o` and `-p` together—the roadmap will be generated once and saved to both the file and the PR comment.
 
@@ -141,6 +143,12 @@ Generate and both save to file and post to PR:
 review_roadmap https://github.com/llamastack/llama-stack/pull/3674 -o roadmap.md -p
 ```
 
+Generate quickly without self-reflection (faster but may have lower quality):
+
+```bash
+review_roadmap https://github.com/llamastack/llama-stack/pull/3674 --no-reflection
+```
+
 ## Development
 
 ```bash
@@ -159,5 +167,8 @@ pytest -v
 The tool uses **LangGraph** to orchestrate the workflow:
 
 1. **Analyze Structure**: LLM analyzes file paths to understand component groups.
-2. **Context Expansion**: (Planned) Fetches additional file content if diffs are ambiguous.
+2. **Context Expansion**: Fetches additional file content if diffs are ambiguous.
 3. **Draft Roadmap**: Synthesizes metadata, diffs, and comments into a coherent guide.
+4. **Self-Reflection**: Reviews the generated roadmap for completeness and accuracy, retrying if needed.
+
+The self-reflection step implements the [self-review pattern](https://github.com/jeremyeder/reference/blob/main/docs/patterns/self-review-reflection.md), where the agent evaluates its own output before presenting it to users. This catches issues like missing files, generic advice, or unclear reasoning—improving quality without manual review.
