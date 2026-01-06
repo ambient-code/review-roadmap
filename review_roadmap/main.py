@@ -37,7 +37,8 @@ def format_pr_comment(roadmap_content: str) -> str:
 def generate(
     pr_url: str = typer.Argument(..., help="GitHub PR URL (e.g., owner/repo/123) or 'owner/repo/123' string"),
     output: str = typer.Option(None, "--output", "-o", help="Output file for the roadmap"),
-    post: bool = typer.Option(False, "--post", "-p", help="Post the roadmap as a comment on the PR")
+    post: bool = typer.Option(False, "--post", "-p", help="Post the roadmap as a comment on the PR"),
+    no_reflection: bool = typer.Option(False, "--no-reflection", help="Skip the self-reflection step")
 ):
     """Generates a review roadmap for a given Pull Request."""
     
@@ -94,9 +95,13 @@ def generate(
     console.print(f"[green]Found PR: {pr_context.metadata.title} (Changed files: {len(pr_context.files)})[/green]")
 
     # 2. Run LangGraph
-    console.print("[bold purple]Generating Roadmap (this may take a minute)...[/bold purple]")
+    if no_reflection:
+        console.print("[bold purple]Generating Roadmap (reflection disabled)...[/bold purple]")
+    else:
+        console.print("[bold purple]Generating Roadmap with self-reflection (this may take a minute)...[/bold purple]")
+    
     graph = build_graph()
-    initial_state = {"pr_context": pr_context}
+    initial_state = {"pr_context": pr_context, "skip_reflection": no_reflection}
     
     result = graph.invoke(initial_state)
     roadmap_content = result.get("roadmap", "")

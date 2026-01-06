@@ -108,3 +108,27 @@ def sample_review_state_with_fetched_content(sample_pr_context: PRContext) -> Re
         },
     )
 
+
+@pytest.fixture
+def sample_review_state_with_roadmap(sample_pr_context: PRContext) -> ReviewState:
+    """Create a sample ReviewState with a generated roadmap for reflection testing."""
+    return ReviewState(
+        pr_context=sample_pr_context,
+        topology={"analysis": "Backend: src/main.py, src/utils.py\nTests: tests/test_main.py"},
+        fetched_content={},
+        roadmap="""# Review Roadmap
+
+## Summary
+This PR adds a new feature to the codebase.
+
+## Review Order
+1. Start with `src/main.py` - the main changes
+2. Review `src/utils.py` - new utility file
+3. Check `tests/test_main.py` - test coverage
+
+## Watch Outs
+- Check error handling in main.py
+- Verify utils.py follows project conventions
+""",
+    )
+
