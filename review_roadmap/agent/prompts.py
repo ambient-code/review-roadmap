@@ -62,12 +62,12 @@ Critically evaluate this roadmap from the perspective of someone who will use it
 ## Response Format
 If the roadmap passes review, respond with EXACTLY this JSON:
 ```json
-{"passed": true, "notes": "Self-review: [brief note on quality]"}
+{{"passed": true, "notes": "Self-review: [brief note on quality]"}}
 ```
 
 If issues need fixing, respond with EXACTLY this JSON:
 ```json
-{"passed": false, "feedback": "[specific issues to fix, be concise]"}
+{{"passed": false, "feedback": "[specific issues to fix, be concise]"}}
 ```
 
 Be rigorous but not pedantic. Only fail roadmaps with genuine issues that would confuse or mislead a reviewer.
