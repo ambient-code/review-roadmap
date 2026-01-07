@@ -5,7 +5,7 @@ GitHub's REST API, specifically for fetching PR context needed to
 generate review roadmaps.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -354,6 +354,78 @@ class GitHubClient:
                 "'Pull requests: Read and write' permission for this specific repository."
             )
         )
+
+    def minimize_old_roadmap_comments(
+        self, owner: str, repo: str, pr_number: int, header_prefix: str
+    ) -> Tuple[int, int]:
+        """Minimize (collapse) old roadmap comments on a PR.
+
+        Finds all issue comments that start with the given header prefix
+        and minimizes them using GitHub's GraphQL API. This keeps the PR
+        conversation clean by collapsing outdated roadmaps.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+            header_prefix: The prefix to match against comment bodies
+                (e.g., "🗺️ **Auto-Generated Review Roadmap**").
+
+        Returns:
+            Tuple of (minimized_count, error_count).
+        """
+        # Fetch all issue comments (includes node_id needed for GraphQL)
+        resp = self.client.get(f"/repos/{owner}/{repo}/issues/{pr_number}/comments")
+        if resp.status_code != 200:
+            return (0, 0)
+
+        comments = resp.json()
+
+        # Filter for roadmap comments by body prefix
+        roadmap_node_ids = [
+            c["node_id"]
+            for c in comments
+            if c.get("body", "").startswith(header_prefix)
+        ]
+
+        if not roadmap_node_ids:
+            return (0, 0)
+
+        # Minimize each comment using GraphQL
+        minimized = 0
+        errors = 0
+        mutation = """
+            mutation($id: ID!) {
+                minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) {
+                    minimizedComment { isMinimized }
+                }
+            }
+        """
+
+        for node_id in roadmap_node_ids:
+            try:
+                gql_resp = self.client.post(
+                    "https://api.github.com/graphql",
+                    json={"query": mutation, "variables": {"id": node_id}},
+                )
+                if gql_resp.status_code == 200:
+                    data = gql_resp.json()
+                    if data.get("data", {}).get("minimizeComment", {}).get(
+                        "minimizedComment", {}
+                    ).get("isMinimized"):
+                        minimized += 1
+                    elif "errors" in data:
+                        errors += 1
+                    else:
+                        # Response OK but isMinimized not true - count as success
+                        # (might already be minimized)
+                        minimized += 1
+                else:
+                    errors += 1
+            except Exception:
+                errors += 1
+
+        return (minimized, errors)
 
     def post_pr_comment(self, owner: str, repo: str, pr_number: int, body: str) -> Dict[str, Any]:
         """Post a comment on a pull request.
