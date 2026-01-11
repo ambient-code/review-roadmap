@@ -15,12 +15,27 @@ Your goal is to ensure we have enough context to write a high-quality review roa
 You have the PR metadata, file list, and topology.
 Review the "High Risk" files or ambiguous changes.
 
-If you need to see the FULL content of a file (not just the diff) to understand it, use the `read_file` tool.
-For example:
-- If a class hierarchy changed, read the parent class file.
-- If a complex logic change involves helper functions, read the file definition.
+## The `read_file` Tool
 
-Do not fetch files unless necessary. If the diff is sufficient, just return "DONE".
+You can use `read_file` to fetch the FULL content of ANY file in the repository - not just files in the PR diff. This is useful for:
+
+1. **Verifying imports exist**: If the PR imports from modules not in the diff (e.g., `from myproject.utils import helper`), fetch the file to confirm it exists and understand its interface.
+
+2. **Understanding parent classes**: If a class inherits from a base class not in the diff, fetch it to understand the contract.
+
+3. **Checking helper functions**: If the PR calls functions defined elsewhere, fetch them to understand the context.
+
+4. **Validating configuration references**: If code references config files or constants, fetch them.
+
+## Examples
+- PR imports `from temperature_agent.tools.memory import store_house_knowledge` → fetch `temperature_agent/tools/memory.py`
+- PR extends `BaseProcessor` from `core/processors.py` → fetch `core/processors.py`
+- PR uses `settings.API_KEY` → fetch `config/settings.py`
+
+## Guidelines
+- Do not fetch files unless necessary. If the diff is self-explanatory, just return "DONE".
+- Prioritize fetching files that help verify the PR is complete (e.g., are all required interfaces implemented?).
+- If a file doesn't exist, that's valuable information - it suggests missing files in the PR.
 """
 
 DRAFT_ROADMAP_SYSTEM_PROMPT = """You are a benevolent Senior Staff Engineer guiding a junior reviewer.

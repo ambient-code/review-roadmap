@@ -84,6 +84,9 @@ class GitHubClient:
     def _fetch_file_diffs(self, owner: str, repo: str, pr_number: int) -> List[FileDiff]:
         """Fetch the list of changed files with their diffs.
 
+        Handles pagination to fetch all files, not just the first page.
+        GitHub defaults to 30 files per page; we request 100 (max allowed).
+
         Args:
             owner: Repository owner.
             repo: Repository name.
@@ -95,19 +98,39 @@ class GitHubClient:
         Raises:
             httpx.HTTPStatusError: If the API request fails.
         """
-        files_resp = self.client.get(f"/repos/{owner}/{repo}/pulls/{pr_number}/files")
-        files_resp.raise_for_status()
+        all_files: List[FileDiff] = []
+        page = 1
+        per_page = 100  # Max allowed by GitHub API
         
-        return [
-            FileDiff(
-                path=f["filename"],
-                status=f["status"],
-                additions=f["additions"],
-                deletions=f["deletions"],
-                diff_content=f.get("patch", "")  # Patch might be missing for binary/large files
+        while True:
+            files_resp = self.client.get(
+                f"/repos/{owner}/{repo}/pulls/{pr_number}/files",
+                params={"page": page, "per_page": per_page}
             )
-            for f in files_resp.json()
-        ]
+            files_resp.raise_for_status()
+            files_data = files_resp.json()
+            
+            if not files_data:
+                break  # No more files
+                
+            all_files.extend([
+                FileDiff(
+                    path=f["filename"],
+                    status=f["status"],
+                    additions=f["additions"],
+                    deletions=f["deletions"],
+                    diff_content=f.get("patch", "")  # Patch might be missing for binary/large files
+                )
+                for f in files_data
+            ])
+            
+            # If we got fewer than per_page, we've reached the last page
+            if len(files_data) < per_page:
+                break
+                
+            page += 1
+        
+        return all_files
 
     def _fetch_issue_comments(self, owner: str, repo: str, pr_number: int) -> List[PRComment]:
         """Fetch general conversation comments from the issues endpoint.
