@@ -312,6 +312,53 @@ def _build_fetched_content_str(fetched_content: Dict[str, str]) -> str:
     return "".join(parts)
 
 
+# Maximum characters per diff before truncation
+MAX_DIFF_CHARS = 1500
+# Maximum total characters for all diffs combined
+MAX_TOTAL_DIFF_CHARS = 80000
+
+
+def _build_diffs_context(state: ReviewState) -> str:
+    """Build formatted diff content for all changed files.
+
+    Includes the actual unified diff for each file so the LLM can see
+    the code changes, not just file names. Large diffs are truncated
+    to manage token limits.
+
+    Args:
+        state: Current workflow state containing PR context.
+
+    Returns:
+        Formatted string with all diffs, suitable for LLM prompt.
+    """
+    if not state.pr_context.files:
+        return "No files changed."
+
+    parts = []
+    total_chars = 0
+
+    for f in state.pr_context.files:
+        if not f.diff_content:
+            # Binary files or very large files may not have diff content
+            file_section = f"### {f.path} ({f.status}, +{f.additions}/-{f.deletions})\n[No diff available - binary or large file]\n"
+        else:
+            diff = f.diff_content
+            if len(diff) > MAX_DIFF_CHARS:
+                diff = diff[:MAX_DIFF_CHARS] + f"\n... (truncated, {len(f.diff_content)} chars total)"
+            file_section = f"### {f.path} ({f.status}, +{f.additions}/-{f.deletions})\n```diff\n{diff}\n```\n"
+
+        # Check if adding this would exceed our total budget
+        if total_chars + len(file_section) > MAX_TOTAL_DIFF_CHARS:
+            remaining = len(state.pr_context.files) - len(parts)
+            parts.append(f"\n... ({remaining} more files not shown due to size limits)\n")
+            break
+
+        parts.append(file_section)
+        total_chars += len(file_section)
+
+    return "\n".join(parts)
+
+
 def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
     """Generate the final Markdown review roadmap.
 
@@ -332,6 +379,7 @@ def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
                 iteration=state.reflection_iterations)
     
     files_context = _build_files_context(state)
+    diffs_context = _build_diffs_context(state)
     comments_context = _build_comments_context(state)
     fetched_context_str = _build_fetched_content_str(state.fetched_content)
     
@@ -357,8 +405,11 @@ def draft_roadmap(state: ReviewState) -> Dict[str, Any]:
     Topology Analysis:
     {state.topology.get('analysis', 'No analysis')}
     
-    Files (with base links):
+    Files (with deep links for review):
     {chr(10).join(files_context)}
+    
+    ## File Diffs (actual code changes)
+    {diffs_context}
     
     Existing Comments:
     {chr(10).join(comments_context) if comments_context else "No comments found."}
