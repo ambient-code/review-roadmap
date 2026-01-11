@@ -198,52 +198,70 @@ class TestGenerateCommand:
             with patch("review_roadmap.main.GitHubClient") as mock_gh:
                 mock_client = MagicMock()
                 mock_client.get_pr_context.return_value = mock_context
-                from review_roadmap.models import WriteAccessResult, WriteAccessStatus
-                mock_client.check_write_access.return_value = WriteAccessResult(
-                    status=WriteAccessStatus.GRANTED,
-                    is_fine_grained_pat=False,
-                    message="Classic token with correct scopes verified."
-                )
                 mock_gh.return_value = mock_client
 
-                with patch("review_roadmap.main.build_graph") as mock_build:
-                    mock_graph = MagicMock()
-                    mock_graph.invoke.return_value = mock_graph_result
-                    mock_build.return_value = mock_graph
+                with patch("review_roadmap.main.find_working_token") as mock_find_token:
+                    from review_roadmap.models import WriteAccessResult, WriteAccessStatus
+                    from review_roadmap.github.client import TokenSearchResult
+                    mock_find_token.return_value = TokenSearchResult(
+                        token="test-token",
+                        access_result=WriteAccessResult(
+                            status=WriteAccessStatus.GRANTED,
+                            is_fine_grained_pat=False,
+                            message="Classic token with correct scopes verified."
+                        ),
+                        tokens_tried=1
+                    )
 
-                    with patch("review_roadmap.main.settings") as mock_settings:
-                        mock_settings.REVIEW_ROADMAP_LLM_PROVIDER = "anthropic"
-                        mock_settings.REVIEW_ROADMAP_MODEL_NAME = "claude"
+                    with patch("review_roadmap.main.build_graph") as mock_build:
+                        mock_graph = MagicMock()
+                        mock_graph.invoke.return_value = mock_graph_result
+                        mock_build.return_value = mock_graph
 
-                        from review_roadmap.main import app
+                        with patch("review_roadmap.main.settings") as mock_settings:
+                            mock_settings.REVIEW_ROADMAP_LLM_PROVIDER = "anthropic"
+                            mock_settings.REVIEW_ROADMAP_MODEL_NAME = "claude"
+                            mock_settings.get_github_tokens.return_value = ["test-token"]
 
-                        result = runner.invoke(app, ["owner/repo/1", "--post"])
+                            from review_roadmap.main import app
 
-                        assert result.exit_code == 0
-                        mock_client.check_write_access.assert_called_once()
-                        mock_client.post_pr_comment.assert_called_once()
+                            result = runner.invoke(app, ["owner/repo/1", "--post"])
+
+                            assert result.exit_code == 0
+                            mock_find_token.assert_called_once()
+                            mock_client.post_pr_comment.assert_called_once()
 
     def test_generate_post_fails_without_write_access(self):
         """Test that --post fails early if no write access."""
         with patch("review_roadmap.main.configure_logging"):
             with patch("review_roadmap.main.GitHubClient") as mock_gh:
                 mock_client = MagicMock()
-                from review_roadmap.models import WriteAccessResult, WriteAccessStatus
-                mock_client.check_write_access.return_value = WriteAccessResult(
-                    status=WriteAccessStatus.DENIED,
-                    is_fine_grained_pat=False,
-                    message="Token lacks required scope."
-                )
                 mock_gh.return_value = mock_client
 
-                from review_roadmap.main import app
+                with patch("review_roadmap.main.find_working_token") as mock_find_token:
+                    from review_roadmap.models import WriteAccessResult, WriteAccessStatus
+                    from review_roadmap.github.client import TokenSearchResult
+                    mock_find_token.return_value = TokenSearchResult(
+                        token=None,
+                        access_result=WriteAccessResult(
+                            status=WriteAccessStatus.DENIED,
+                            is_fine_grained_pat=False,
+                            message="Token lacks required scope."
+                        ),
+                        tokens_tried=1
+                    )
 
-                result = runner.invoke(app, ["owner/repo/1", "--post"])
+                    with patch("review_roadmap.main.settings") as mock_settings:
+                        mock_settings.get_github_tokens.return_value = ["test-token"]
 
-                assert result.exit_code == 1
-                assert "write access" in result.output.lower()
-                # Should not have tried to fetch PR context
-                mock_client.get_pr_context.assert_not_called()
+                        from review_roadmap.main import app
+
+                        result = runner.invoke(app, ["owner/repo/1", "--post"])
+
+                        assert result.exit_code == 1
+                        assert "write access" in result.output.lower()
+                        # Should not have tried to fetch PR context
+                        mock_client.get_pr_context.assert_not_called()
 
     def test_generate_handles_pr_fetch_error(self):
         """Test that PR fetch errors are handled gracefully."""
@@ -272,30 +290,38 @@ class TestGenerateCommand:
             with patch("review_roadmap.main.GitHubClient") as mock_gh:
                 mock_client = MagicMock()
                 mock_client.get_pr_context.return_value = mock_context
-                from review_roadmap.models import WriteAccessResult, WriteAccessStatus
-                mock_client.check_write_access.return_value = WriteAccessResult(
-                    status=WriteAccessStatus.GRANTED,
-                    is_fine_grained_pat=False,
-                    message="Classic token with correct scopes verified."
-                )
                 mock_client.post_pr_comment.side_effect = Exception("Post failed")
                 mock_gh.return_value = mock_client
 
-                with patch("review_roadmap.main.build_graph") as mock_build:
-                    mock_graph = MagicMock()
-                    mock_graph.invoke.return_value = mock_graph_result
-                    mock_build.return_value = mock_graph
+                with patch("review_roadmap.main.find_working_token") as mock_find_token:
+                    from review_roadmap.models import WriteAccessResult, WriteAccessStatus
+                    from review_roadmap.github.client import TokenSearchResult
+                    mock_find_token.return_value = TokenSearchResult(
+                        token="test-token",
+                        access_result=WriteAccessResult(
+                            status=WriteAccessStatus.GRANTED,
+                            is_fine_grained_pat=False,
+                            message="Classic token with correct scopes verified."
+                        ),
+                        tokens_tried=1
+                    )
 
-                    with patch("review_roadmap.main.settings") as mock_settings:
-                        mock_settings.REVIEW_ROADMAP_LLM_PROVIDER = "anthropic"
-                        mock_settings.REVIEW_ROADMAP_MODEL_NAME = "claude"
+                    with patch("review_roadmap.main.build_graph") as mock_build:
+                        mock_graph = MagicMock()
+                        mock_graph.invoke.return_value = mock_graph_result
+                        mock_build.return_value = mock_graph
 
-                        from review_roadmap.main import app
+                        with patch("review_roadmap.main.settings") as mock_settings:
+                            mock_settings.REVIEW_ROADMAP_LLM_PROVIDER = "anthropic"
+                            mock_settings.REVIEW_ROADMAP_MODEL_NAME = "claude"
+                            mock_settings.get_github_tokens.return_value = ["test-token"]
 
-                        result = runner.invoke(app, ["owner/repo/1", "--post"])
+                            from review_roadmap.main import app
 
-                        assert result.exit_code == 1
-                        assert "Error posting comment" in result.output
+                            result = runner.invoke(app, ["owner/repo/1", "--post"])
+
+                            assert result.exit_code == 1
+                            assert "Error posting comment" in result.output
 
     def test_generate_prints_to_console_by_default(self):
         """Test that roadmap is printed to console when no output/post flags."""
