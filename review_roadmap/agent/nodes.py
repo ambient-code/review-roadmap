@@ -472,8 +472,26 @@ Changed Files:
     
     # Parse response (with fallback for non-JSON responses)
     import json
+    import re
+    
+    # Strip markdown code fences if present (LLM often wraps JSON in ```json ... ```)
+    content = response.content.strip()
+    # Try complete code fence first
+    code_fence_pattern = r'^```(?:json)?\s*\n?(.*?)\n?```$'
+    match = re.match(code_fence_pattern, content, re.DOTALL)
+    if match:
+        content = match.group(1).strip()
+    else:
+        # Handle truncated response or unclosed code fence
+        if content.startswith('```'):
+            # Remove opening fence (```json or ```)
+            content = re.sub(r'^```(?:json)?\s*\n?', '', content)
+            # Remove closing fence if present
+            content = re.sub(r'\n?```$', '', content)
+            content = content.strip()
+    
     try:
-        result = json.loads(response.content)
+        result = json.loads(content)
         passed = result.get("passed", False)
         feedback = result.get("feedback", "")
         notes = result.get("notes", "")

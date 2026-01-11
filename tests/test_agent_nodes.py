@@ -453,6 +453,62 @@ class TestReflectOnRoadmapNode:
         assert result["reflection_passed"] is True
         assert result["reflection_iterations"] == 1
 
+    def test_reflection_handles_json_in_code_fence(
+        self, sample_review_state_with_roadmap: ReviewState
+    ):
+        """Test that reflection correctly parses JSON wrapped in markdown code fences."""
+        mock_response = MagicMock()
+        # This is the format the LLM often returns - JSON wrapped in code fences
+        mock_response.content = '```json\n{"passed": true, "notes": "Self-review: looks good"}\n```'
+
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
+            with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
+                mock_prompt = MagicMock()
+                mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+                mock_template.from_messages.return_value = mock_prompt
+
+                from review_roadmap.agent.nodes import reflect_on_roadmap
+
+                result = reflect_on_roadmap(sample_review_state_with_roadmap)
+
+        # Should correctly parse the JSON from within code fences
+        assert result["reflection_passed"] is True
+        assert result["reflection_iterations"] == 1
+
+    def test_reflection_handles_truncated_code_fence(
+        self, sample_review_state_with_roadmap: ReviewState
+    ):
+        """Test that reflection handles truncated code fences (missing closing ```)."""
+        mock_response = MagicMock()
+        # Truncated response - missing closing ```
+        mock_response.content = '```json\n{"passed": true, "notes": "Self-review: good"}'
+
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+        with patch("review_roadmap.agent.nodes._get_llm_instance", return_value=mock_llm):
+            with patch("review_roadmap.agent.nodes.ChatPromptTemplate") as mock_template:
+                mock_prompt = MagicMock()
+                mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+                mock_template.from_messages.return_value = mock_prompt
+
+                from review_roadmap.agent.nodes import reflect_on_roadmap
+
+                result = reflect_on_roadmap(sample_review_state_with_roadmap)
+
+        # Should correctly parse the JSON even with truncated code fence
+        assert result["reflection_passed"] is True
+        assert result["reflection_iterations"] == 1
+
     def test_reflection_increments_iteration_count(
         self, sample_review_state_with_roadmap: ReviewState
     ):
