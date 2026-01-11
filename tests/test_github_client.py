@@ -436,3 +436,190 @@ def test_post_pr_comment_success():
     
     assert result["id"] == 123456
     assert result["body"] == comment_body
+
+
+# --- Tests for minimize_old_roadmap_comments ---
+
+ROADMAP_PREFIX = "🗺️ **Auto-Generated Review Roadmap**"
+
+
+@respx.mock
+def test_minimize_old_roadmap_comments_no_comments():
+    """Returns (0, 0) when there are no comments on the PR."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+    respx.get(url).mock(return_value=Response(200, json=[]))
+    
+    client = GitHubClient(token="fake-token")
+    minimized, errors = client.minimize_old_roadmap_comments(owner, repo, pr_number, ROADMAP_PREFIX)
+    
+    assert minimized == 0
+    assert errors == 0
+
+
+@respx.mock
+def test_minimize_old_roadmap_comments_no_matching_comments():
+    """Returns (0, 0) when no comments match the roadmap prefix."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+    respx.get(url).mock(return_value=Response(200, json=[
+        {
+            "id": 1,
+            "node_id": "IC_node1",
+            "body": "This is a regular comment",
+            "user": {"login": "user1"},
+            "created_at": "2024-01-01T00:00:00Z"
+        },
+        {
+            "id": 2,
+            "node_id": "IC_node2",
+            "body": "Another comment mentioning roadmap but not starting with prefix",
+            "user": {"login": "user2"},
+            "created_at": "2024-01-02T00:00:00Z"
+        }
+    ]))
+    
+    client = GitHubClient(token="fake-token")
+    minimized, errors = client.minimize_old_roadmap_comments(owner, repo, pr_number, ROADMAP_PREFIX)
+    
+    assert minimized == 0
+    assert errors == 0
+
+
+@respx.mock
+def test_minimize_old_roadmap_comments_success():
+    """Successfully minimizes roadmap comments and ignores non-roadmap comments."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    comments_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+    graphql_url = "https://api.github.com/graphql"
+    
+    # Mix of roadmap and non-roadmap comments
+    respx.get(comments_url).mock(return_value=Response(200, json=[
+        {
+            "id": 1,
+            "node_id": "IC_roadmap1",
+            "body": f"{ROADMAP_PREFIX}\n\nOld roadmap content here",
+            "user": {"login": "github-actions[bot]"},
+            "created_at": "2024-01-01T00:00:00Z"
+        },
+        {
+            "id": 2,
+            "node_id": "IC_regular",
+            "body": "Regular comment - should not be minimized",
+            "user": {"login": "reviewer"},
+            "created_at": "2024-01-02T00:00:00Z"
+        },
+        {
+            "id": 3,
+            "node_id": "IC_roadmap2",
+            "body": f"{ROADMAP_PREFIX}\n\nAnother old roadmap",
+            "user": {"login": "user1"},
+            "created_at": "2024-01-03T00:00:00Z"
+        }
+    ]))
+    
+    # Mock GraphQL responses for both roadmap comments
+    respx.post(graphql_url).mock(return_value=Response(200, json={
+        "data": {
+            "minimizeComment": {
+                "minimizedComment": {"isMinimized": True}
+            }
+        }
+    }))
+    
+    client = GitHubClient(token="fake-token")
+    minimized, errors = client.minimize_old_roadmap_comments(owner, repo, pr_number, ROADMAP_PREFIX)
+    
+    # Should minimize 2 roadmap comments, not the regular one
+    assert minimized == 2
+    assert errors == 0
+
+
+@respx.mock
+def test_minimize_old_roadmap_comments_graphql_error():
+    """Handles GraphQL errors gracefully and counts them."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    comments_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+    graphql_url = "https://api.github.com/graphql"
+    
+    respx.get(comments_url).mock(return_value=Response(200, json=[
+        {
+            "id": 1,
+            "node_id": "IC_roadmap1",
+            "body": f"{ROADMAP_PREFIX}\n\nOld roadmap",
+            "user": {"login": "user1"},
+            "created_at": "2024-01-01T00:00:00Z"
+        }
+    ]))
+    
+    # Mock GraphQL error response
+    respx.post(graphql_url).mock(return_value=Response(200, json={
+        "errors": [{"message": "Could not resolve to a node with the global id"}]
+    }))
+    
+    client = GitHubClient(token="fake-token")
+    minimized, errors = client.minimize_old_roadmap_comments(owner, repo, pr_number, ROADMAP_PREFIX)
+    
+    assert minimized == 0
+    assert errors == 1
+
+
+@respx.mock
+def test_minimize_old_roadmap_comments_http_error():
+    """Handles HTTP errors on GraphQL endpoint gracefully."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    comments_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+    graphql_url = "https://api.github.com/graphql"
+    
+    respx.get(comments_url).mock(return_value=Response(200, json=[
+        {
+            "id": 1,
+            "node_id": "IC_roadmap1",
+            "body": f"{ROADMAP_PREFIX}\n\nOld roadmap",
+            "user": {"login": "user1"},
+            "created_at": "2024-01-01T00:00:00Z"
+        }
+    ]))
+    
+    # Mock HTTP 403 error on GraphQL
+    respx.post(graphql_url).mock(return_value=Response(403, json={
+        "message": "Forbidden"
+    }))
+    
+    client = GitHubClient(token="fake-token")
+    minimized, errors = client.minimize_old_roadmap_comments(owner, repo, pr_number, ROADMAP_PREFIX)
+    
+    assert minimized == 0
+    assert errors == 1
+
+
+@respx.mock
+def test_minimize_old_roadmap_comments_fetch_error():
+    """Returns (0, 0) when fetching comments fails."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    comments_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
+    respx.get(comments_url).mock(return_value=Response(404, json={"message": "Not Found"}))
+    
+    client = GitHubClient(token="fake-token")
+    minimized, errors = client.minimize_old_roadmap_comments(owner, repo, pr_number, ROADMAP_PREFIX)
+    
+    assert minimized == 0
+    assert errors == 0
