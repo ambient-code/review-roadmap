@@ -7,7 +7,8 @@ prefix to avoid conflicts with shell environment variables.
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +22,9 @@ class Settings(BaseSettings):
 
     Attributes:
         GITHUB_TOKEN: GitHub API token for fetching PR data.
+        REVIEW_ROADMAP_GITHUB_TOKENS: Comma-separated list of GitHub tokens.
+            When set, these are tried in order during write access checks.
+            Takes precedence over GITHUB_TOKEN for write operations.
         REVIEW_ROADMAP_LLM_PROVIDER: LLM provider to use. Options:
             'anthropic', 'anthropic-vertex', 'openai', 'google'.
         REVIEW_ROADMAP_MODEL_NAME: Model name (e.g., 'claude-opus-4-5', 'gpt-4o').
@@ -39,7 +43,60 @@ class Settings(BaseSettings):
     )
 
     # GitHub
-    GITHUB_TOKEN: str
+    GITHUB_TOKEN: Optional[str] = None
+    REVIEW_ROADMAP_GITHUB_TOKENS: Optional[str] = None
+    
+    @model_validator(mode="after")
+    def validate_github_token(self) -> "Settings":
+        """Ensure at least one GitHub token is configured."""
+        if not self.GITHUB_TOKEN and not self.REVIEW_ROADMAP_GITHUB_TOKENS:
+            raise ValueError(
+                "Either GITHUB_TOKEN or REVIEW_ROADMAP_GITHUB_TOKENS must be set"
+            )
+        return self
+    
+    def get_github_tokens(self) -> List[str]:
+        """Get the list of GitHub tokens to try, in order of precedence.
+        
+        When REVIEW_ROADMAP_GITHUB_TOKENS is set, those tokens take precedence
+        and are returned first. GITHUB_TOKEN (if set and not already in the list)
+        is appended as a fallback.
+        
+        Returns:
+            List of unique, non-empty GitHub tokens to try.
+        """
+        tokens: List[str] = []
+        
+        # REVIEW_ROADMAP_GITHUB_TOKENS takes precedence
+        if self.REVIEW_ROADMAP_GITHUB_TOKENS:
+            tokens.extend(
+                t.strip() 
+                for t in self.REVIEW_ROADMAP_GITHUB_TOKENS.split(",") 
+                if t.strip()
+            )
+        
+        # Add GITHUB_TOKEN as fallback if not already included
+        if self.GITHUB_TOKEN and self.GITHUB_TOKEN not in tokens:
+            tokens.append(self.GITHUB_TOKEN)
+        
+        return tokens
+    
+    def get_default_github_token(self) -> str:
+        """Get the default GitHub token for read operations.
+        
+        Returns the first available token (REVIEW_ROADMAP_GITHUB_TOKENS
+        takes precedence over GITHUB_TOKEN).
+        
+        Returns:
+            The first available GitHub token.
+        
+        Raises:
+            ValueError: If no tokens are configured.
+        """
+        tokens = self.get_github_tokens()
+        if not tokens:
+            raise ValueError("No GitHub tokens configured")
+        return tokens[0]
 
     # LLM Configuration (prefixed to avoid conflicts with shell environment)
     REVIEW_ROADMAP_LLM_PROVIDER: str = "anthropic"

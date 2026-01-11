@@ -1,7 +1,7 @@
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from review_roadmap.github.client import GitHubClient
+from review_roadmap.github.client import GitHubClient, find_working_token
 from review_roadmap.agent.graph import build_graph
 from review_roadmap.config import settings
 from review_roadmap.logging import configure_logging
@@ -59,27 +59,49 @@ def generate(
         console.print("[red]Invalid PR format. Use 'owner/repo/number' or a full URL.[/red]")
         raise typer.Exit(code=1)
 
-    # Initialize GitHub client
+    # Initialize GitHub client (default token for read operations)
     gh_client = GitHubClient()
+    
+    # Token with write access (may differ from default if using multi-token)
+    write_token = None
 
     # Check write access early if posting is requested (fail fast before LLM generation)
     if post:
-        console.print(f"[bold blue]Checking write access for {owner}/{repo}...[/bold blue]")
+        tokens = settings.get_github_tokens()
+        
+        if len(tokens) > 1:
+            console.print(f"[bold blue]Searching {len(tokens)} tokens for write access to {owner}/{repo}...[/bold blue]")
+        else:
+            console.print(f"[bold blue]Checking write access for {owner}/{repo}...[/bold blue]")
+        
         try:
-            # Pass pr_number to enable live write test for fine-grained PATs
-            access_result = gh_client.check_write_access(owner, repo, pr_number)
+            # Search through available tokens for one with write access
+            search_result = find_working_token(owner, repo, pr_number)
             
-            if access_result.status == WriteAccessStatus.DENIED:
-                console.print(
-                    f"[red]Error: {access_result.message}[/red]\n"
-                    "[yellow]To use --post, your token needs 'Pull requests: Read and write' permission.[/yellow]"
-                )
-                raise typer.Exit(code=1)
-            elif access_result.status == WriteAccessStatus.UNCERTAIN:
-                console.print(f"[yellow]Warning: {access_result.message}[/yellow]")
+            if search_result.token:
+                write_token = search_result.token
+                if search_result.tokens_tried > 1:
+                    console.print(f"[green]Write access confirmed (token {search_result.tokens_tried} of {len(tokens)}).[/green]")
+                else:
+                    console.print("[green]Write access confirmed.[/green]")
+                # Update client to use the working token for subsequent operations
+                gh_client = GitHubClient(token=write_token)
+            elif search_result.access_result.status == WriteAccessStatus.UNCERTAIN:
+                console.print(f"[yellow]Warning: {search_result.access_result.message}[/yellow]")
                 console.print("[yellow]Proceeding, but posting may fail...[/yellow]")
             else:
-                console.print("[green]Write access confirmed.[/green]")
+                if search_result.tokens_tried > 1:
+                    console.print(
+                        f"[red]Error: None of the {search_result.tokens_tried} configured tokens have write access.[/red]\n"
+                        f"[red]Last error: {search_result.access_result.message}[/red]\n"
+                        "[yellow]To use --post, at least one token needs 'Pull requests: Read and write' permission.[/yellow]"
+                    )
+                else:
+                    console.print(
+                        f"[red]Error: {search_result.access_result.message}[/red]\n"
+                        "[yellow]To use --post, your token needs 'Pull requests: Read and write' permission.[/yellow]"
+                    )
+                raise typer.Exit(code=1)
         except typer.Exit:
             raise
         except Exception as e:

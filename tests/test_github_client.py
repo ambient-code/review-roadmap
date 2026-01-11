@@ -623,3 +623,158 @@ def test_minimize_old_roadmap_comments_fetch_error():
     
     assert minimized == 0
     assert errors == 0
+
+
+# --- Tests for find_working_token ---
+
+from unittest.mock import patch
+from review_roadmap.github.client import find_working_token, TokenSearchResult
+from review_roadmap.models import WriteAccessResult
+
+
+@respx.mock
+def test_find_working_token_first_token_works():
+    """find_working_token returns first token when it has write access."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    # Mock repo endpoint with push permission
+    respx.get(f"https://api.github.com/repos/{owner}/{repo}").mock(
+        return_value=Response(200, json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": True, "pull": True}
+        }, headers={"X-OAuth-Scopes": "repo"})
+    )
+    
+    with patch("review_roadmap.github.client.settings") as mock_settings:
+        mock_settings.get_github_tokens.return_value = ["token1", "token2"]
+        
+        result = find_working_token(owner, repo, pr_number)
+        
+        assert result.token == "token1"
+        assert result.access_result.status == WriteAccessStatus.GRANTED
+        assert result.tokens_tried == 1
+
+
+@respx.mock
+def test_find_working_token_second_token_works():
+    """find_working_token tries second token when first fails."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    # Track which token is being used via call count
+    call_count = [0]
+    
+    def repo_response(request):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # First token: no push permission
+            return Response(200, json={
+                "id": 12345,
+                "name": repo,
+                "private": False,
+                "permissions": {"admin": False, "push": False, "pull": True}
+            })
+        else:
+            # Second token: has push permission
+            return Response(200, json={
+                "id": 12345,
+                "name": repo,
+                "private": False,
+                "permissions": {"admin": False, "push": True, "pull": True}
+            }, headers={"X-OAuth-Scopes": "repo"})
+    
+    respx.get(f"https://api.github.com/repos/{owner}/{repo}").mock(side_effect=repo_response)
+    
+    with patch("review_roadmap.github.client.settings") as mock_settings:
+        mock_settings.get_github_tokens.return_value = ["token1", "token2"]
+        
+        result = find_working_token(owner, repo, pr_number)
+        
+        assert result.token == "token2"
+        assert result.access_result.status == WriteAccessStatus.GRANTED
+        assert result.tokens_tried == 2
+
+
+@respx.mock
+def test_find_working_token_no_tokens_configured():
+    """find_working_token returns None when no tokens configured."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    with patch("review_roadmap.github.client.settings") as mock_settings:
+        mock_settings.get_github_tokens.return_value = []
+        
+        result = find_working_token(owner, repo, pr_number)
+        
+        assert result.token is None
+        assert result.access_result.status == WriteAccessStatus.DENIED
+        assert result.tokens_tried == 0
+        assert "No GitHub tokens configured" in result.access_result.message
+
+
+@respx.mock
+def test_find_working_token_all_tokens_fail():
+    """find_working_token returns None when all tokens fail."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    # All tokens have no push permission
+    respx.get(f"https://api.github.com/repos/{owner}/{repo}").mock(
+        return_value=Response(200, json={
+            "id": 12345,
+            "name": repo,
+            "private": False,
+            "permissions": {"admin": False, "push": False, "pull": True}
+        })
+    )
+    
+    with patch("review_roadmap.github.client.settings") as mock_settings:
+        mock_settings.get_github_tokens.return_value = ["token1", "token2", "token3"]
+        
+        result = find_working_token(owner, repo, pr_number)
+        
+        assert result.token is None
+        assert result.access_result.status == WriteAccessStatus.DENIED
+        assert result.tokens_tried == 3
+
+
+@respx.mock
+def test_find_working_token_handles_invalid_token():
+    """find_working_token handles invalid/revoked tokens gracefully."""
+    owner = "owner"
+    repo = "repo"
+    pr_number = 42
+    
+    call_count = [0]
+    
+    def repo_response(request):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # First token is invalid
+            return Response(401, json={"message": "Bad credentials"})
+        else:
+            # Second token works
+            return Response(200, json={
+                "id": 12345,
+                "name": repo,
+                "private": False,
+                "permissions": {"admin": False, "push": True, "pull": True}
+            }, headers={"X-OAuth-Scopes": "repo"})
+    
+    respx.get(f"https://api.github.com/repos/{owner}/{repo}").mock(side_effect=repo_response)
+    
+    with patch("review_roadmap.github.client.settings") as mock_settings:
+        mock_settings.get_github_tokens.return_value = ["bad-token", "good-token"]
+        
+        result = find_working_token(owner, repo, pr_number)
+        
+        assert result.token == "good-token"
+        assert result.access_result.status == WriteAccessStatus.GRANTED
+        assert result.tokens_tried == 2

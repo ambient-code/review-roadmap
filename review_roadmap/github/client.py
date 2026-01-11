@@ -5,6 +5,7 @@ GitHub's REST API, specifically for fetching PR context needed to
 generate review roadmaps.
 """
 
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -14,6 +15,21 @@ from review_roadmap.models import (
     PRContext, PRMetadata, FileDiff, PRComment,
     WriteAccessResult, WriteAccessStatus,
 )
+
+
+@dataclass
+class TokenSearchResult:
+    """Result of searching for a token with write access.
+    
+    Attributes:
+        token: The token that was found with write access, or None if no token worked.
+        access_result: The WriteAccessResult from checking the successful token,
+            or the last failed result if no token worked.
+        tokens_tried: Number of tokens that were tested.
+    """
+    token: Optional[str]
+    access_result: WriteAccessResult
+    tokens_tried: int
 
 
 class GitHubClient:
@@ -37,9 +53,10 @@ class GitHubClient:
         """Initialize the GitHub client.
 
         Args:
-            token: GitHub API token. If not provided, uses GITHUB_TOKEN from settings.
+            token: GitHub API token. If not provided, uses the first available
+                token from settings (REVIEW_ROADMAP_GITHUB_TOKENS takes precedence).
         """
-        self.token = token or settings.GITHUB_TOKEN
+        self.token = token or settings.get_default_github_token()
         self.headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/vnd.github.v3+json",
@@ -471,3 +488,79 @@ class GitHubClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+
+def find_working_token(
+    owner: str, repo: str, pr_number: int
+) -> TokenSearchResult:
+    """Find a GitHub token with write access from the configured tokens.
+    
+    Iterates through all configured tokens (from REVIEW_ROADMAP_GITHUB_TOKENS
+    and GITHUB_TOKEN) and tests each one for write access using the
+    check_write_access method with a live reaction test.
+    
+    Args:
+        owner: Repository owner.
+        repo: Repository name.
+        pr_number: PR number for live write testing.
+    
+    Returns:
+        TokenSearchResult containing:
+        - token: The first token with GRANTED status, or None if none worked
+        - access_result: The WriteAccessResult from the successful check,
+          or the last failed result if no token worked
+        - tokens_tried: Number of tokens that were tested
+    
+    Example:
+        >>> result = find_working_token("owner", "repo", 123)
+        >>> if result.token:
+        ...     client = GitHubClient(token=result.token)
+        ...     client.post_pr_comment(owner, repo, 123, "Hello!")
+    """
+    tokens = settings.get_github_tokens()
+    
+    if not tokens:
+        return TokenSearchResult(
+            token=None,
+            access_result=WriteAccessResult(
+                status=WriteAccessStatus.DENIED,
+                is_fine_grained_pat=False,
+                message="No GitHub tokens configured."
+            ),
+            tokens_tried=0
+        )
+    
+    last_result: Optional[WriteAccessResult] = None
+    
+    for i, token in enumerate(tokens, start=1):
+        client = GitHubClient(token=token)
+        try:
+            result = client.check_write_access(owner, repo, pr_number)
+            last_result = result
+            
+            if result.status == WriteAccessStatus.GRANTED:
+                return TokenSearchResult(
+                    token=token,
+                    access_result=result,
+                    tokens_tried=i
+                )
+        except Exception:
+            # Token failed to even check access (e.g., network error, invalid token)
+            # Continue to next token
+            last_result = WriteAccessResult(
+                status=WriteAccessStatus.DENIED,
+                is_fine_grained_pat=False,
+                message=f"Token failed basic validation (may be invalid or revoked)."
+            )
+            continue
+    
+    # No token worked - return the last result
+    return TokenSearchResult(
+        token=None,
+        access_result=last_result or WriteAccessResult(
+            status=WriteAccessStatus.DENIED,
+            is_fine_grained_pat=False,
+            message="No tokens were successfully tested."
+        ),
+        tokens_tried=len(tokens)
+    )
